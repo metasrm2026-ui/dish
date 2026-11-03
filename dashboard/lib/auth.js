@@ -8,7 +8,8 @@ export function isRoutine(req) {
   return [process.env.ROUTINE_SECRET, process.env.ROUTINE_SECRET_NEXT].some(s => !!s && h === `Bearer ${s}`);
 }
 export const isReviewer = req => !!req.user;
-export const isAdmin = req => !!req.user && req.user.role === 'admin';
+// the product owner (docs/PRODUCT.md "Roles"; lib/tenancy.js)
+export const isAdmin = req => !!req.user && (req.user.role === 'super' || req.user.role === 'admin');
 export function deny(res, msg = 'sign in first') {
   res.status(401).json({ error: msg });
 }

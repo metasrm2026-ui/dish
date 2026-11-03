@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-const { client } = await import('./helpers.mjs');
+const { client, adminPage, setPassword } = await import('./helpers.mjs');
 const { PART_BYTES } = await import('../routes/admin.js');
 const { putRecord } = await import('../lib/db.js');
 const mem = globalThis.__boreBlobs;
@@ -43,7 +43,7 @@ async function setup() {
   const boot = await robot.call('POST', '/api/routine/bootstrap', { email: 'owner@example.com', name: 'O' }, R);
   await admin.call('POST', '/api/auth/reset', { token: boot.body.setup_link.split('#reset=')[1], password: 'correct horse 42' });
   assert.equal((await admin.call('POST', '/api/auth/login', { email: 'owner@example.com', password: 'correct horse 42' })).status, 200);
-  slug = (await admin.call('POST', '/api/admin/pages', { name: 'Dummy Docs', socialpilot_login_id: '1' })).body.page.slug;
+  slug = await adminPage(admin, 'Dummy Docs', '1');
 }
 
 // what app.js does: start, every part (base64), finish; each request under the limit

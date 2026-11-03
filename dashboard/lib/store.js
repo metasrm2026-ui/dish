@@ -71,7 +71,7 @@ export function groupDrafts(blobs) {
   return Object.values(by).filter(d => d.draftUrl);
 }
 
-// ids look like <page>-<YYYYMMDDHHMM>-<slug>; a page's slug can hold '-2' itself (top-25-hoops)
+// ids look like <page>-<YYYYMMDDHHMM>-<slug>; a page's slug can hold '-2' itself (top-20-demo)
 export function pageOf(id) {
   const m = id.match(/^(.*?)-\d{12}-/);
   return m ? m[1] : id.split('-2')[0];

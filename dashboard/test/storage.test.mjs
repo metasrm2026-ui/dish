@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 process.env.BLOB_RETRY_MS = '1';                      // retries without the production waits
-const { client } = await import('./helpers.mjs');
+const { client, adminPage, setPassword } = await import('./helpers.mjs');
 const db = await import('../lib/db.js');
 const { put } = await import('../lib/blob.js');
 const { encryptJson, decryptJson } = await import('../lib/crypto.js');
@@ -48,7 +48,7 @@ async function setup() {
   const boot = await robot.call('POST', '/api/routine/bootstrap', { email: 'owner@example.com', name: 'O' }, R);
   await owner.call('POST', '/api/auth/reset', { token: boot.body.setup_link.split('#reset=')[1], password: 'correct horse 42' });
   assert.equal((await owner.call('POST', '/api/auth/login', { email: 'owner@example.com', password: 'correct horse 42' })).status, 200);
-  slug = (await owner.call('POST', '/api/admin/pages', { name: 'Dummy', socialpilot_login_id: '1' })).body.page.slug;
+  slug = await adminPage(owner, 'Dummy', '1');
   const story = i => ({ id: `s${i}`, headline: `Story ${i}`, summary: 'S.', score: 5, published_at: Date.now(), url: `https://e.com/${i}`,
     sources: [{ name: 'E', url: `https://e.com/${i}` }], ideas: [{ title: 'A', template: 'headline', description: 'a' }, { title: 'B', template: 'quote', description: 'b' }],
     images: [{ url: `https://img.e.com/${i}.jpg`, source: 'web' }] });

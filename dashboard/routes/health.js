@@ -18,6 +18,7 @@ import { listAll, groupDrafts, getJson, pageOf } from '../lib/store.js';
 import { decryptJson } from '../lib/crypto.js';
 import { clean } from '../lib/http.js';
 import { isAdmin } from '../lib/auth.js';
+import { pageScope, idPage } from '../lib/tenancy.js';
 import { socialpilotHealth } from './result.js';
 import { nudgeJobs } from './studio.js';
 import { nudgeTemplates } from './templates.js';
@@ -381,9 +382,13 @@ export async function computeHealth(now = Date.now()) {
   let drafts = [], pages = [];
   await area('drafts', async () => { drafts = groupDrafts(await listAll()); });
   await area('pages', async () => { pages = (await listRecords('pages')).filter(p => !p.archived); });
-  await area('hourly_routine', () => hourlyRules(now, add, drafts));
-  await area('topic_feed', () => topicRules(now, add, pages));
-  await area('publisher', () => publisherRules(now, add, drafts, person));
+  // a page the routines do not work (paused, not live yet, or failed to go live: docs/PRODUCT.md "A
+  // page's life") makes no drafts, has no story feed and publishes nothing: none of that is a fault
+  const idle = new Set(pages.filter(p => p.status && !['live', 'going_live'].includes(p.status)).map(p => p.slug));
+  const worked = drafts.filter(d => !idle.has(d.page));
+  if (!pages.length || pages.some(p => !idle.has(p.slug))) await area('hourly_routine', () => hourlyRules(now, add, worked));
+  await area('topic_feed', () => topicRules(now, add, pages.filter(p => !idle.has(p.slug))));
+  await area('publisher', () => publisherRules(now, add, worked, person));
   await area('studio_jobs', () => studioRules(now, add));
   await area('editor_requests', () => requestRules(now, add, drafts));
   await area('run_reports', () => runRules(now, add, person));
@@ -524,17 +529,35 @@ export function plain(r) {
 }
 // an editor's posts needing a person: only those of their own pages (draft ids name the page), with
 // only their ids, red only for one of theirs that is urgent
-const yours = (r, pages) => {
+const yours = (r, scope) => {
   if (r.code !== 'publisher_needs_person') return r;
   const all = r.person || { urgent: [], other: r.ids };      // (a status stored before r.person: amber)
-  const mine = k => (all[k] || []).filter(id => pages.includes(pageOf(id)));
+  const mine = k => (all[k] || []).filter(id => scope.has(pageOf(id)));
   const urgent = mine('urgent'), ids = [...urgent, ...mine('other')];
   return ids.length ? { ...r, level: urgent.length ? 'red' : 'amber', ids: ids.slice(0, 12) } : null;
 };
-const forUser = (h, admin, pages = []) => {
+// Reasons about some pages' drafts, jobs, links or feeds (their ids name the page: lib/tenancy.js
+// idPage; a feed's is the page itself): a person who is not the product owner sees one only when it
+// is about pages they may use, with only those ids, and never the product-wide count in its words.
+const PAGE_REASONS = ['topics_stale', 'publisher_unclaimed', 'publisher_stuck', 'publisher_unconfirmed', 'publisher_held',
+                      'studio_queued', 'studio_stuck', 'studio_fire_failed', 'link_waiting', 'regen_waiting'];
+const SCOPED_TEXT = {
+  publisher_held: 'Some approved posts are waiting for SocialPilot: they are tried again about every hour.',
+  studio_fire_failed: 'Some Studio jobs are waiting: the Studio routine could not be started: the admin has been told.',
+  link_waiting: 'Some of your links have waited more than 2 hours: the hourly routine has not made them or said why not.',
+  regen_waiting: 'Some posts sent back to be redone have waited more than 2 hours: the hourly routine has not made them or said why not.',
+};
+function scoped(r, scope) {
+  if (r.code === 'publisher_needs_person') return yours(r, scope);
+  if (!PAGE_REASONS.includes(r.code)) return r;
+  const ids = (r.ids || []).filter(id => scope.has(id) || scope.has(idPage(id)));
+  if (!ids.length) return null;
+  return { ...r, ids, ...(SCOPED_TEXT[r.code] ? { text: SCOPED_TEXT[r.code] } : {}) };
+}
+const forUser = (h, admin, scope = new Set()) => {
   const reasons = h.reasons.map(({ person: _, ...r }) => ({ ...r, plain: plain(r) }));
   if (admin) return { ...h, reasons };
-  const shown = h.reasons.map(r => r.code === 'publisher_needs_person' ? yours(r, pages) : r).filter(Boolean)
+  const shown = h.reasons.map(r => scoped(r, scope)).filter(Boolean)
     .map(({ person: _, ...r }) => ({ ...r, plain: plain(r) }))
     .filter(r => r.plain).map(({ admin: _, plain: p, ...r }) => ({ ...r, text: p }));
   return { ...h, reasons: shown, status: !shown.length ? 'green' : shown.some(r => r.level === 'red') ? 'red' : 'amber' };
@@ -543,5 +566,5 @@ const forUser = (h, admin, pages = []) => {
 export default async function handler(req, res) {
   if (!req.user) return res.status(401).json({ error: 'sign in first' });
   if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); return res.status(405).end(); }
-  return res.status(200).json(forUser(await health({ after: Number(req.query.after) || 0 }), isAdmin(req), req.user.pages || []));
+  return res.status(200).json(forUser(await health({ after: Number(req.query.after) || 0 }), isAdmin(req), await pageScope(req)));
 }

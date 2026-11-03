@@ -3,18 +3,21 @@
 //       (approved includes those the publisher is scheduling right now: publishing)
 //       A routine POST with `replaces: <old id>` marks the old draft regenerated.
 import { isRoutine, isReviewer, deny } from '../lib/auth.js';
-import { listAll, groupDrafts, getJson, saveDraft, setStatus, deleteOlderThan, lastMidnight, claimDecision, setDecided, decidedBy } from '../lib/store.js';
+import { listAll, groupDrafts, getJson, pageOf, saveDraft, setStatus, deleteOlderThan, lastMidnight, claimDecision, setDecided, decidedBy } from '../lib/store.js';
 import { audit } from '../lib/audit.js';
 import { recordReview } from '../lib/reviews.js';
 import { setLinkStatus } from './links.js';
 import { already } from './decide.js';
-import { mapLimit, READ_CONCURRENCY, errorStatus } from '../lib/db.js';
-
-// an editor sees and decides only the posts of their own pages (admins: every page), as in the Studio
-const mine = (req, d) => !req.user || req.user.role === 'admin' || (req.user.pages || []).includes(d.page);
+import { mapLimit, READ_CONCURRENCY, errorStatus, getRecord } from '../lib/db.js';
+import { pageScope, inScope } from '../lib/tenancy.js';
+import { statusOf } from '../lib/pages.js';
 
 export default async function handler(req, res) {
   try {
+    // a person sees and decides only the posts of the pages they may use (lib/tenancy.js: their
+    // workspace's, an editor's own); the product owner and the routines every page
+    const scope = await pageScope(req);
+    const mine = (r, d) => inScope(scope, d.page);
     if (req.method === 'POST' && req.query.action === 'clear') {   // editors clear waiting posts
       if (!isReviewer(req)) return deny(res);
       const b = req.body || {};
@@ -59,6 +62,11 @@ export default async function handler(req, res) {
       if (!isRoutine(req)) return deny(res);
       const { image_b64, extra_images_b64, ...draft } = req.body || {};
       if (!draft.id || !draft.page || !draft.caption || !image_b64) return res.status(400).json({ error: 'id, page, caption, image_b64 required' });
+      if (pageOf(String(draft.id)) !== String(draft.page)) return res.status(400).json({ error: 'the id must start with the page: <page>-<YYYYMMDDHHMM>-<slug>' });
+      // a post is made only for a live page (or one making its first posts): never a paused one
+      const pg = await getRecord('pages', String(draft.page));
+      if (!pg) return res.status(404).json({ error: 'no such page' });
+      if (!['live', 'going_live'].includes(statusOf(pg))) return res.status(409).json({ error: `the page is ${statusOf(pg).replace('_', ' ')}: no posts are made for it` });
       // a post "as is" can carry the editor's other images (posted together, in order)
       const extras = (Array.isArray(extra_images_b64) ? extra_images_b64 : []).slice(0, 5).map(b => Buffer.from(String(b), 'base64'));
       const imageUrl = await saveDraft(draft, Buffer.from(image_b64, 'base64'), extras);

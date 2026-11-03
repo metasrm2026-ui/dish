@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { client } from './helpers.mjs';
+import { client, adminPage } from './helpers.mjs';
 
 const R = { routine: true };
 
@@ -11,7 +11,7 @@ test('the feed keeps written_from and the not-news verdict for the next hour', a
   const boot = await robot.call('POST', '/api/routine/bootstrap', { email: 'owner@example.com', name: 'Owner' }, R);
   const token = boot.body.setup_link.split('#reset=')[1];
   assert.equal((await admin.call('POST', '/api/auth/reset', { token, password: 'correct horse 42' })).status, 200);
-  const slug = (await admin.call('POST', '/api/admin/pages', { name: 'Dummy Feed' })).body.page.slug;
+  const slug = await adminPage(admin, 'Dummy Feed');
 
   const urls = Array.from({ length: 40 }, (_, i) => `https://x.com/a/status/${i}`);
   const stories = [

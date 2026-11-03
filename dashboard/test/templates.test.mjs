@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-const { client } = await import('./helpers.mjs');
+const { client, adminPage } = await import('./helpers.mjs');
 const { updateRecord, getRecord } = await import('../lib/db.js');
 const mem = globalThis.__boreBlobs;
 
@@ -25,10 +25,10 @@ async function setup() {
   const boot = await robot.call('POST', '/api/routine/bootstrap', { email: 'owner@example.com', name: 'O' }, R);
   await setPassword(admin, boot.body.setup_link, 'correct horse 42');
   assert.equal((await admin.call('POST', '/api/auth/login', { email: 'owner@example.com', password: 'correct horse 42' })).status, 200);
-  slug = (await admin.call('POST', '/api/admin/pages', { name: 'Made Up Page', socialpilot_login_id: '1' })).body.page.slug;
-  const other = (await admin.call('POST', '/api/admin/pages', { name: 'Other Page', socialpilot_login_id: '2' })).body.page.slug;
+  slug = await adminPage(admin, 'Made Up Page', '1');
+  const other = await adminPage(admin, 'Other Page', '2');
   for (const [c, email, pages] of [[editor, 'ed@example.com', [slug]], [stranger, 'st@example.com', [other]]]) {
-    const inv = await admin.call('POST', '/api/admin/users', { email, role: 'editor', pages });
+    const inv = await admin.call('POST', '/api/admin/users', { email, role: 'editor', workspace: admin.ws, pages });
     assert.equal((await setPassword(c, inv.body.setup_link, 'editor pass 77')).status, 200);
   }
 }
@@ -335,7 +335,7 @@ test('a template sent for a job that is not this page\'s templates job is refuse
 
 test('a template stored before refs were kept gets one that never moves or collides', async () => {
   await setup();
-  const legacy = (await admin.call('POST', '/api/admin/pages', { name: 'Legacy Made Up Page', socialpilot_login_id: '3' })).body.page.slug;
+  const legacy = await adminPage(admin, 'Legacy Made Up Page', '3');
   const old = id => ({ id, in_use: null, versions: [{ v: 1, name: `Made-up ${id}`, status: 'pending', note: '', doc_version: 1, doc_pages: [1], pages: [], at: 1 }] });
   await updateRecord('templates', legacy, () => ({ page: legacy, specs: { b: old('b'), c: old('c') } }));   // b was t1, c t2
   const r = await robot.call('POST', '/api/routine/templates', { page: legacy, job: '', doc_version: 1, doc_pages: [2], spec: spec('a'),

@@ -9,10 +9,17 @@
 //              post id and account when recorded)
 //   socialpilot: {down, error, since, last_try_at, last_ok_at} - while it is down, held drafts
 //              wait for the next hourly try (bore/publish.py split_waiting)
+//   waiting:   approved drafts of pages that cannot publish now (paused, not live, no account, an
+//              account on the deny list: lib/pages.js notPublishable), with why. They are not in the
+//              queue: they go out once the page is live again.
+// A page's SocialPilot account is only ever the one the onboarding routine linked to a live page,
+// never one on the deny list ('' otherwise).
 import { isRoutine, deny } from '../lib/auth.js';
 import { listAll, groupDrafts, loadDraft, getJson } from '../lib/store.js';
 import { getRecord, mapLimit, READ_CONCURRENCY } from '../lib/db.js';
 import { socialpilotHealth } from './result.js';
+import { notPublishable } from '../lib/pages.js';
+import { isDenied } from '../lib/deny.js';
 
 const SENT = ['publishing', 'scheduled', 'posted'];
 
@@ -21,17 +28,30 @@ export default async function handler(req, res) {
   const all = groupDrafts(await listAll());
   const pick = st => all.filter(d => st.includes(d.status));
   const pages = {};
-  const loginOf = async slug => {                      // the page's SocialPilot account (admin panel); null: unreadable
-    if (!(slug in pages)) pages[slug] = await getRecord('pages', slug).then(p => (p && p.socialpilot_login_id) || '').catch(() => null);
+  const pageOf = async slug => {                       // the page's record; null: unreadable
+    if (!(slug in pages)) pages[slug] = await getRecord('pages', slug).then(p => p || false).catch(() => null);
     return pages[slug];
   };
+  // the page's SocialPilot account (linked by the onboarding routine); null: unreadable
+  const loginOf = async slug => {
+    const p = await pageOf(slug);
+    if (p === null) return null;
+    return p && p.socialpilot_login_id && !isDenied(p.socialpilot_login_id) ? p.socialpilot_login_id : '';
+  };
+  const waiting = [];
+  for (const d of pick(['approved'])) {
+    const p = await pageOf(d.page);
+    const why = p === null ? '' : notPublishable(p || null);
+    if (why) waiting.push({ id: d.id, page: d.page, why });
+  }
+  const closed = new Set(waiting.map(w => w.id));
   // the SocialPilot post an earlier claim made (its latest scheduled or posted record)
   const priorPost = async d => {
     const s = [...d.statuses].reverse().find(x => x.status === 'scheduled' || x.status === 'posted');
     const r = s ? ((await getJson(s.url).catch(() => ({}))).result || {}) : {};
     return r.sp_post_id || r.post_id || null;
   };
-  const queue = await mapLimit(pick(['approved']), READ_CONCURRENCY, async d => {   // a few at a time: hundreds at once get refused
+  const queue = await mapLimit(pick(['approved']).filter(d => !closed.has(d.id)), READ_CONCURRENCY, async d => {   // a few at a time: hundreds at once get refused
     const x = await loadDraft(d.id);
     const login = await loginOf(x.page);
     // a post sent again under a new id (resent_from: the Studio's resend) counts what the old one did
@@ -64,5 +84,5 @@ export default async function handler(req, res) {
     return { id: x.id, page: x.page, page_name: x.page_name, scheduled_for: r.scheduled_for || null, claimed_at: x.statusBody && x.statusBody.at,
              caption: x.caption_final, socialpilot_login_id: (await loginOf(x.page)) || '', update_of: x.update_of || null };
   });
-  res.status(200).json({ queue, scheduled, in_progress, socialpilot: await socialpilotHealth() });
+  res.status(200).json({ queue, scheduled, in_progress, waiting, socialpilot: await socialpilotHealth() });
 }

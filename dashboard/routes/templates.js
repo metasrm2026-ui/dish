@@ -1,7 +1,7 @@
 // /api/templates/*  a page's post templates as template specs (bore/tspec.py, docs/TEMPLATE_SPEC.md).
 // The Studio routine converts each template of the page's templates document into a spec (a
 // 'templates' Studio job, STUDIO.md TEMPLATES) and sends it with a preview drawn from it and the
-// document page(s) it was made from. An editor of the page (or an admin) approves it, or rejects it
+// document page(s) it was made from. An editor of the page (or its owner) approves it, or rejects it
 // with a note: it is then converted again with that note. Only an approved version is ever drawn:
 // the routines get the approved specs in their config (`studio sync`).
 //   GET  templates?page=                                 the page's templates, the document version, the conversion job
@@ -10,16 +10,16 @@
 //   POST templates/<page>/<id>/<v>/approve               this version is the one the routines draw
 //   POST templates/<page>/<id>/<v>/reject   {note}       not this one (out of use if it was): converted again with the note
 //   POST templates/<page>/<id>/<v>/retire   {note?}      out of use, nothing converted (one the new document dropped)
-//   POST templates/<page>/convert                        admins: convert the whole document again
+//   POST templates/<page>/convert                        the page's owner: convert the whole document again
 // The previews and pages are pictures of the page's confidential templates document: stored
-// encrypted, the document's pages shown to admins only and never cached by the browser (a preview: a
+// encrypted, the document's pages shown to the page's owner (and the super) only and never cached by the browser (a preview: a
 // few minutes, in the viewer's own cache). The audit log
 // and job records name a template by its neutral ref (t1, t2 ...), never by its name or id (both
 // come from the document).
 import crypto from 'node:crypto';
 import { getRecord, updateRecord, createRecord, listBlobs, putFile, getFile, appendLog } from '../lib/db.js';
 import { put, del } from '../lib/blob.js';
-import { canUsePage } from '../lib/session.js';
+import { mayUse, mayManage, refusal } from '../lib/tenancy.js';
 import { fire } from '../lib/fire.js';
 import { audit } from '../lib/audit.js';
 import { randomId } from '../lib/crypto.js';
@@ -279,12 +279,15 @@ async function decide(u, slug, id, v, action, note) {
   return rec;
 }
 
+// The page's owner (and the super) sees the document's own pages and can convert it again; its editors
+// compare with the previews.
 async function pageOut(u, slug) {
   const [p, rec] = await Promise.all([getRecord('pages', slug), getRecord('templates', slug)]);
+  const owner = mayManage(u, p);
   let job = rec && rec.job && rec.job.id ? await getRecord('jobs', rec.job.id).catch(() => null) : null;
   if (job && await nudgeTemplates(job).catch(() => false)) job = await getRecord('jobs', job.id).catch(() => job);
-  return { page: slug, doc: activeDoc(p), templates: templatesOut(rec, activeDoc(p), job), can_convert: u.role === 'admin',
-           can_see_document: u.role === 'admin',
+  return { page: slug, doc: activeDoc(p), templates: templatesOut(rec, activeDoc(p), job), can_convert: owner,
+           can_see_document: owner,
            job: job ? { id: job.id, status: job.status, reason: job.reason || '', created_at: job.created_at, started_at: job.started_at || null,
                         done_at: job.done_at || null, error: job.error || '', only: job.only || null, sent: job.sent || 0,
                         result: job.result || null } : null };
@@ -301,7 +304,7 @@ export default async function handler(req, res) {
       const slug = clean(req.query.page, 60);
       const p = slug && await getRecord('pages', slug);
       if (!p || p.archived) return bad(res, 'no such page', 404);
-      if (!await canUsePage(u, slug)) return bad(res, 'you do not have access to this page', 403);
+      if (!mayUse(u, p)) { const r = refusal(u, p); return bad(res, r.error, r.status); }
       const out = await pageOut(u, slug);
       // the images on the screen are part of this view (the screen following a conversion is not a new
       // one): an admin's includes the document's pages beside them, one entry for all of them
@@ -311,10 +314,11 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && first === 'image') {
       const slug = clean(req.query.page, 60);
-      if (!slug || !await canUsePage(u, slug)) return bad(res, 'you do not have access to this page', 403);
-      // a picture of the confidential document's own page: admins only (editors compare with the preview)
+      const pg = slug && await getRecord('pages', slug);
+      if (!pg || !mayUse(u, pg)) { const r = refusal(u, pg); return bad(res, r.error, r.status); }
+      // a picture of the confidential document's own page: its owner and the super only (editors compare with the preview)
       const page = req.query.kind !== 'preview';
-      if (page && u.role !== 'admin') return bad(res, 'only an admin sees the templates document', 403);
+      if (page && !mayManage(u, pg)) return bad(res, 'only the page\'s owner sees the templates document', 403);
       const rec = await getRecord('templates', slug);
       const id = clean(req.query.id, 60), t = rec && rec.specs && rec.specs[id];
       const x = t && t.versions.find(y => y.v === (req.query.v === 'in_use' ? t.in_use : Number(req.query.v)));
@@ -331,9 +335,9 @@ export default async function handler(req, res) {
     if (req.method !== 'POST' || !slug) return bad(res, 'not found', 404);
     const p = await getRecord('pages', slug);
     if (!p || p.archived) return bad(res, 'no such page', 404);
-    if (!await canUsePage(u, slug)) return bad(res, 'you do not have access to this page', 403);
+    if (!mayUse(u, p)) { const r = refusal(u, p); return bad(res, r.error, r.status); }
     if (id === 'convert' && !v) {
-      if (u.role !== 'admin') return bad(res, 'only an admin can convert the templates again', 403);
+      if (!mayManage(u, p)) return bad(res, 'only the page\'s owner can convert the templates again', 403);
       const doc = activeDoc(p);
       if (!doc) return bad(res, 'the page has no templates document: upload it first (Admin > Pages)');
       const r = await queueConversion(u.email, slug, { reason: 'admin', doc_version: doc.version });

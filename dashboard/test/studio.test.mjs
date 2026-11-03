@@ -2,7 +2,7 @@
 // request the dashboard does not know, captions the editor wrote, and the smaller Studio rules.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-const { client } = await import('./helpers.mjs');
+const { client, adminPage, setPassword } = await import('./helpers.mjs');
 const { updateRecord, getRecord } = await import('../lib/db.js');
 const { saveDraft, setStatus, loadDraft } = await import('../lib/store.js');
 const { needsAction, LOOKUPS_FAILED } = await import('../routes/result.js');
@@ -20,7 +20,7 @@ async function setup() {
   const boot = await robot.call('POST', '/api/routine/bootstrap', { email: 'owner@example.com', name: 'O' }, R);
   await owner.call('POST', '/api/auth/reset', { token: boot.body.setup_link.split('#reset=')[1], password: 'correct horse 42' });
   assert.equal((await owner.call('POST', '/api/auth/login', { email: 'owner@example.com', password: 'correct horse 42' })).status, 200);
-  slug = (await owner.call('POST', '/api/admin/pages', { name: 'Dummy', socialpilot_login_id: '1' })).body.page.slug;
+  slug = await adminPage(owner, 'Dummy', '1');
   const story = i => ({ id: `s${i}`, headline: `Story ${i}`, summary: 'S.', score: 5, published_at: Date.now(), url: `https://e.com/${i}`,
     sources: [{ name: 'E', url: `https://e.com/${i}` }], ideas: [{ title: 'A', template: 'headline', description: 'a' }, { title: 'B', template: 'quote', description: 'b' }],
     images: [{ url: `https://img.e.com/${i}a.jpg`, source: 'web' }, { url: `https://img.e.com/${i}b.jpg`, source: 'web' }] });
@@ -407,7 +407,7 @@ test('the post times the page suggested, left as they were, move later to the ea
   await setup();
   const min = 60e3;
   // a page of its own: no other test's posts queued for it
-  const page = (await owner.call('POST', '/api/admin/pages', { name: 'Gap Page', socialpilot_login_id: '2' })).body.page.slug;
+  const page = await adminPage(owner, 'Gap Page', '2');
   await robot.call('POST', '/api/routine/feed', { page, stories: [1, 2, 3, 4].map(i => ({ id: `g${i}`, headline: `G ${i}`, summary: 'S.', score: 1,
     published_at: Date.now(), url: `https://e.com/g${i}`, sources: [{ name: 'E', url: `https://e.com/g${i}` }],
     ideas: [{ title: 'A', template: 'headline', description: 'a' }], images: [{ url: `https://img.e.com/g${i}.jpg`, source: 'web' }] })) }, R);
@@ -876,7 +876,7 @@ test('a visual whose session stopped answering: the page is told, Start again re
 
 test('a batch a colleague cleared: its page says who did, nothing is queued only to vanish, and it can be restored', async () => {
   await setup();
-  const inv = await owner.call('POST', '/api/admin/users', { email: 'colleague@example.com', name: 'C', role: 'editor', pages: [slug] });
+  const inv = await owner.call('POST', '/api/admin/users', { email: 'colleague@example.com', name: 'C', role: 'editor', workspace: owner.ws, pages: [slug] });
   const ed = client();
   await ed.call('POST', '/api/auth/reset', { token: inv.body.setup_link.split('#reset=')[1], password: 'correct horse 42' });
   assert.equal((await ed.call('POST', '/api/auth/login', { email: 'colleague@example.com', password: 'correct horse 42' })).status, 200);
@@ -911,7 +911,7 @@ test('a batch a colleague cleared: its page says who did, nothing is queued only
 test('"Post now" is told the time it will get: the page\'s first free slot, not "about an hour"', async () => {
   await setup();
   const min = 60e3;
-  const page = (await owner.call('POST', '/api/admin/pages', { name: 'Now Page', socialpilot_login_id: '3' })).body.page.slug;
+  const page = await adminPage(owner, 'Now Page', '3');
   await robot.call('POST', '/api/routine/feed', { page, stories: [1, 2].map(i => ({ id: `n${i}`, headline: `N ${i}`, summary: 'S.', score: 1,
     published_at: Date.now(), url: `https://e.com/n${i}`, sources: [{ name: 'E', url: `https://e.com/n${i}` }],
     ideas: [{ title: 'A', template: 'headline', description: 'a' }], images: [{ url: `https://img.e.com/n${i}.jpg`, source: 'web' }] })) }, R);

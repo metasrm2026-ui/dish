@@ -7,11 +7,12 @@ import { isRoutine, isReviewer, deny } from '../lib/auth.js';
 import { listAll, groupDrafts, getJson, pageOf } from '../lib/store.js';
 import { listRecords } from '../lib/db.js';
 import { socialpilotHealth, needsAction } from './result.js';
+import { pageScope, inScope } from '../lib/tenancy.js';
 
 // what the routine learned, for the editors' banner: kind labels and counts only (no examples),
 // what their notes keep saying and the photos they keep rejecting
-async function lessonsSummary() {
-  const pages = Object.fromEntries((await listRecords('pages')).map(p => [p.slug, p.name]));
+async function lessonsSummary(scope) {
+  const pages = Object.fromEntries((await listRecords('pages')).filter(p => inScope(scope, p.slug)).map(p => [p.slug, p.name]));
   return (await listRecords('lessons')).filter(l => pages[l.page]).map(l => {
     const kinds = Object.values(l.kinds || {}).filter(k => k.n >= 5);
     const themes = (l.note_themes || []).slice(0, 3);
@@ -75,9 +76,11 @@ export default async function handler(req, res) {
   const since = Number(req.query.since || 0);
   const page = req.query.page ? String(req.query.page) : null;
   const counts = {}, totals = {};      // totals: whenever made, as the review page's tabs list them
-  const grouped = groupDrafts(await listAll());
-  // an editor counts only their own pages' posts, and sees only their notes (admins: every page)
-  const theirs = pg => !req.user || req.user.role === 'admin' || (req.user.pages || []).includes(pg);
+  // a person counts only the posts of the pages they may use (lib/tenancy.js: their workspace's, an
+  // editor's own), and sees only their notes and lessons; the product owner and the routines every page
+  const scope = await pageScope(req);
+  const theirs = pg => inScope(scope, pg);
+  const grouped = groupDrafts(await listAll()).filter(d => theirs(d.page));
   for (const d of grouped) {
     if ((page && d.page !== page) || !theirs(d.page)) continue;
     totals[d.status] = (totals[d.status] || 0) + 1;
@@ -90,5 +93,5 @@ export default async function handler(req, res) {
   const notes = await needsAction({ strict: true }).catch(() => null);
   const needs_action = Object.fromEntries(Object.entries(notes || {}).filter(([id]) => theirs(pageOf(id))));   // by the id: notes from before the '-2' fix carry a wrong page
   res.status(200).json({ since, counts, totals, publisher: { ...(await publisherHealth(grouped)), needs_action, ...(notes ? {} : { needs_action_unknown: true }) },
-                        lessons: isReviewer(req) ? await lessonsSummary().catch(() => []) : undefined });
+                        lessons: isReviewer(req) ? await lessonsSummary(scope).catch(() => []) : undefined });
 }
