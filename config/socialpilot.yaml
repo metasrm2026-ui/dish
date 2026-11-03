@@ -1,14 +1,6 @@
-# Page -> SocialPilot account (Facebook pages), from the SocialPilot connector's AccountList
-# (2026-09-26). The publisher posts ONLY to these loginIds. "Keaton Caleb" (2662937) is also
-# connected in SocialPilot and must never be used.
-timezone: Asia/Kolkata            # SocialPilot account timezone (UserInfo); scheduleDateTime is read in it
-scheduling:
-  min_delay_minutes: 60           # never post directly: at least 1 hour after approval
-  min_gap_minutes: 45             # at least 45 minutes between two posts on the same page
-  studio_min_lead_minutes: 60     # Post Studio: the editor's time, but never sooner than this from now
-  # owner's choice (Oct 13): post as soon as possible at any hour. To post only in US daytime again:
-  # audience_hours: {timezone: America/New_York, start: 7, end: 23}
-blocked_login_ids: [2662937]     # never post to these accounts
-accounts:
-  culture-rush: {name: Culture Rush, loginId: 2662938}
-  huddle: {name: Huddle Room, loginId: 2662936}
+# SocialPilot accounts this product may post to: ONLY the account the onboarding routine linked to a
+# live page (pages/<slug>.socialpilot_login_id, ONBOARD.md step 2). Nothing is listed here by page.
+# Accounts that are never used, whatever a page record says: the owner's own pages (another
+# deployment of the engine) and personal accounts.
+blocked_login_ids: [2662937, 2662938, 2662936]
+accounts: {}
