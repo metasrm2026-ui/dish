@@ -1,5 +1,6 @@
-// Post Studio: login, page selection, the 8-step workflow (topics -> ideas -> visual -> caption
-// -> check -> post) and the admin panel. Plain JS, hash routes, server state only (no secrets,
+// Bore Studio: sign-in, the owners' pages (connect, documents, Go live, the onboarding's progress),
+// their editors, page selection, Post Studio's steps (topics -> ideas -> visual -> caption -> check ->
+// post), the templates and the product owner's admin panel. Plain JS, hash routes, server state only (no secrets,
 // prompts or reference documents ever reach the browser).
 'use strict';
 const $ = s => document.querySelector(s);
@@ -42,7 +43,7 @@ async function api(path, opts = {}) {
     }
     throw Object.assign(new Error(why), { status: 401 });
   }
-  if (r.status === 403 && /^\/api\/(studio|admin)\//.test(path) && S.me) {
+  if (r.status === 403 && /^\/api\/(studio|admin|pages|workspace)\//.test(path) && S.me) {
     const lost = await accessLost();
     if (lost) throw Object.assign(new Error(lost), { body: j, status: 403 });
   }
@@ -60,12 +61,12 @@ const go = p => { if (location.hash !== '#' + p) location.hash = p; else route()
 function markDirty(e) { const el = e.target; if (el.closest && el.closest('#main') && el.type !== 'file') el.dataset.dirty = '1'; }
 document.addEventListener('input', markDirty, true);
 document.addEventListener('change', markDirty, true);
-// Signed out (idle too long) on an admin screen: what was changed and not saved is kept for this tab
-// and put back once they are signed in again on the same screen, to be saved
+// Signed out (idle too long) on an admin, page or editors screen: what was changed and not saved is
+// kept for this tab and put back once they are signed in again on the same screen, to be saved
 const draftKey = el => { const tr = el.closest('tr'), host = el.parentElement.closest('[id]');
   return [host && host.id, tr ? Object.values(tr.dataset).join(',') : '', el.name || el.id || el.dataset.ov || el.dataset.k || '', el.type === 'checkbox' ? el.value : ''].join('|'); };
 function keepDrafts() {
-  if (!S.me || !location.hash.startsWith('#/admin/')) return;
+  if (!S.me || !/^#\/(admin|pages|workspace)\b/.test(location.hash)) return;
   const d = [...document.querySelectorAll('#main [data-dirty]')].filter(el => !el.matches('[data-active]'))   // (a source switched on or off is sent at once)
     .map(el => [draftKey(el), el.type === 'checkbox' ? el.checked : el.value]);
   if (d.length) try { sessionStorage.setItem('drafts', JSON.stringify({ hash: location.hash, at: Date.now(), user: S.me.user.id, d })); } catch (e) {}
@@ -123,19 +124,25 @@ function fileToB64(file, maxSide = 2000) {
 }
 
 // ------------------------------------------------------------------ header
+const BRAND = '<a class="brand" href="#/"><span class="mark" aria-hidden="true"></span>Bore Studio</a>';
+const ROLE_NAME = { super: 'product owner', owner: 'owner', editor: 'editor' };
 function header() {
   const u = S.me && S.me.user;
-  if (!u) { $('#top').innerHTML = `<div class="bar"><span class="brand">Post Studio</span></div>`; return; }
-  const h = location.hash;
-  const nav = [['#/studio', 'Studio'], ['/review.html', 'Hourly approvals'], ['#/templates', 'Templates'], ...(u.role === 'super' ? [['#/admin/users', 'Admin']] : [])];
-  $('#top').innerHTML = `<div class="bar"><span class="brand">Post Studio</span>
-    <nav class="nav">${nav.map(([href, l]) => `<a href="${href}" class="${h.startsWith(href) || (href === '#/studio' && h.startsWith('#/studio')) ? 'on' : ''}">${l}</a>`).join('')}</nav>
-    ${S.pages.length ? `<label class="pagebadge">Page <select id="pagesel">${S.pages.map(p => `<option value="${esc(p.slug)}" ${p.slug === S.page ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>` : ''}
-    <span class="me">${esc(u.email)} · ${esc(u.role)} <a href="#/password">Password</a> <a href="#" id="logout">Sign out</a></span></div>
+  if (!u) { $('#top').innerHTML = `<div class="bar">${BRAND}</div>`; return; }
+  const h = location.hash, role = myRole();
+  // [link, label, the screens it is lit for]
+  const nav = [...(addsPages() || role === 'owner' ? [['#/pages', 'Pages']] : []), ['#/studio', 'Studio'], ['/review.html', 'Approvals'], ['#/templates', 'Templates'],
+               ...(role === 'owner' || (role === 'super' && u.workspace) ? [['#/workspace', 'Editors']] : []), ...(role === 'super' ? [['#/admin/testers', 'Admin', '#/admin']] : [])];
+  // (open access: nobody signs in, so there is no password to change and nothing to sign out of)
+  $('#top').innerHTML = `<div class="bar">${BRAND}
+    <nav class="nav">${nav.map(([href, l, lit]) => `<a href="${href}" class="${h.startsWith(lit || href) ? 'on' : ''}">${l}</a>`).join('')}</nav>
+    ${S.pages.length ? `<label class="pagebadge">Page <select id="pagesel">${S.pages.map(p => `<option value="${esc(p.slug)}" ${p.slug === S.page ? 'selected' : ''}>${esc(p.name)}${p.status && p.status !== 'live' ? ` (${esc(STATUS_LABEL[p.status] || p.status)})` : ''}</option>`).join('')}</select></label>` : ''}
+    <span class="me">${esc(u.email)} · ${esc(ROLE_NAME[role] || role)}${S.me.open_access ? '' : ' <a href="#/password">Password</a> <a href="#" id="logout">Sign out</a>'}</span></div>
     <div id="health">${healthBanner()}</div>`;
   const sel = $('#pagesel');
   if (sel) sel.onchange = () => { setPage(sel.value); if (location.hash.startsWith('#/studio/b/')) go('/studio'); else route(); };
-  $('#logout').onclick = async e => { e.preventDefault(); await api('/api/auth/logout', { method: 'POST', body: {} }).catch(() => {}); S.me = null; go('/login'); };
+  const out = $('#logout');
+  if (out) out.onclick = async e => { e.preventDefault(); await api('/api/auth/logout', { method: 'POST', body: {} }).catch(() => {}); S.me = null; go('/login'); };
 }
 function setPage(slug) { S.page = slug; S.feed = null; S.picked.clear(); try { localStorage.setItem('studioPage', slug); } catch (e) {} }
 
@@ -172,7 +179,7 @@ function loginView(next, why) {
     btn.disabled = true; btn.textContent = 'Signing in…';
     try { await api('/api/auth/login', { method: 'POST', body: { email: e.target.email.value, password: e.target.password.value } });
           await loadMe(); if (next === 'review') location.href = '/review.html';
-          else go(next && next.startsWith('/') && !next.startsWith('/login') ? next : '/studio'); }
+          else go(next && next.startsWith('/') && !next.startsWith('/login') ? next : home()); }
     catch (err) { toast(err.message); btn.disabled = false; btn.textContent = 'Sign in'; }
   };
 }
@@ -207,7 +214,7 @@ function setPasswordView(token) {
     try {
       if (token) await api('/api/auth/reset', { method: 'POST', body: { token, password: f.pw.value } });
       else await api('/api/auth/password', { method: 'POST', body: { current: f.current.value, password: f.pw.value } });
-      toast('Password saved'); history.replaceState(null, '', '#/studio'); await loadMe(); go('/studio');
+      toast('Password saved'); history.replaceState(null, '', '#/studio'); await loadMe(); go(home());
     } catch (err) {
       btn.disabled = false; btn.textContent = 'Save';
       if (token && err.body && err.body.expired) {
@@ -235,7 +242,7 @@ async function studioHome() {
     if (nav !== S.nav) return;
     if (!S.me) return route();
     header();
-    if (!S.pages.length) { $('#main').innerHTML = `<div class="empty">No pages are assigned to you yet. Ask an admin.</div>`; return; }
+    if (!S.pages.length) { $('#main').innerHTML = addsPages() ? firstPage() : `<div class="empty">No pages are assigned to you yet. Ask an admin.</div>`; return; }
   }
   const [r] = await Promise.all([api(`/api/studio/batches?page=${encodeURIComponent(S.page)}`).catch(e => ({ batches: [], failed: e })), topicsView()]);
   const open = r.batches.filter(b => !b.done);
@@ -299,7 +306,11 @@ async function topicsView() {
   if (!S.page) return go('/studio');
   const nav = S.nav;
   const page = S.pages.find(p => p.slug === S.page);
+  // a page that is not live, or paused, has a read-only Studio (routes/studio.js): said here, and no batch is started
+  S.closed = page.status && page.status !== 'live' ? (page.status === 'paused' ? `${page.name} is paused: its Studio is read only until it is resumed.`
+    : `${page.name} is not live yet: its Studio opens once it has gone live.`) : '';
   $('#main').innerHTML = `<div class="row"><h2>Pick up to 5 stories · ${esc(page.name)}</h2></div>
+    ${S.closed ? `<div class="job" data-closed style="margin-bottom:14px">${esc(S.closed)}${page.can_manage ? ` <a href="#/pages/${esc(page.slug)}">Open the page</a>` : ''}</div>` : ''}
     <div class="panel grid">
       <div class="row"><span class="muted">Published in the last</span>
         ${[3, 12, 24].map(h => `<button class="btn small ${h === S.hours ? 'primary' : ''}" data-h="${h}">${h} hours</button>`).join('')}
@@ -356,6 +367,7 @@ function drawTopics() {
   $('#upd').textContent = (S.feed && S.feed.fallback ? S.feed.fallback + ' ' : '')
     + (S.feed && S.feed.updated_at ? `Stories refreshed ${ago(S.feed.updated_at)} (every hour)` : 'The story list is prepared by the hourly routine');
   const full = S.picked.size >= 5;
+  $('#list').classList.remove('muted');                              // (the stories read as text, not as a note)
   $('#list').innerHTML = stories.length ? stories.map(s => {
     const on = S.picked.has(s.id);
     return `<label class="story ${on ? 'sel' : ''}"><input type="checkbox" data-id="${esc(s.id)}" ${on ? 'checked' : ''} ${!on && full ? 'disabled' : ''}>
@@ -365,7 +377,7 @@ function drawTopics() {
       <div class="muted">${s.published_at ? ago(s.published_at) : ''}</div></label>`;
   }).join('') : `<div class="empty">No stories in this window yet.</div>`;
   $('#count').textContent = `${S.picked.size} of 5 selected`;
-  $('#cont').disabled = !S.picked.size;
+  $('#cont').disabled = !S.picked.size || !!S.closed;
   document.querySelectorAll('#list input[type=checkbox]').forEach(cb => cb.onchange = () => {
     const s = stories.find(x => x.id === cb.dataset.id);
     if (cb.checked) S.picked.set(s.id, s); else S.picked.delete(s.id);
@@ -1118,7 +1130,7 @@ async function postView(id, fromPoll) {
 
 // ------------------------------------------------------------------ admin
 function adminTabs(cur) {
-  return `<div class="steps">${[['users', 'Users'], ['pages', 'Pages'], ['templates', 'Templates'], ['health', 'Health'], ['audit', 'Audit log'], ['usage', 'Usage']].map(([k, l]) =>
+  return `<div class="steps">${[['testers', 'Testers'], ['pages', 'Pages'], ['users', 'Users'], ['templates', 'Templates'], ['health', 'Health'], ['audit', 'Audit log'], ['usage', 'Usage'], ['settings', 'Settings']].map(([k, l]) =>
     `<a href="#/admin/${k}" class="${k === cur ? 'on' : ''}">${l}</a>`).join('')}</div>`;
 }
 // a button is off while its request runs: a second click would send it twice (a second reset link
@@ -1130,18 +1142,22 @@ async function oneAtATime(btn, fn) {
 }
 async function adminUsers() {
   const nav = S.nav;
-  const [{ users }, { pages }] = await Promise.all([api('/api/admin/users'), api('/api/admin/pages')]);
+  const [{ users }, { pages }, { workspaces }] = await Promise.all([api('/api/admin/users'), api('/api/admin/pages'), api('/api/admin/workspaces')]);
   if (nav !== S.nav) return;                                         // they moved on meanwhile
   const shown = pages.filter(p => !p.archived);      // archived pages are kept on the server, not offered here
-  const pageOpts = sel => shown.map(p => `<label style="margin-right:10px"><input type="checkbox" value="${esc(p.slug)}" ${sel.includes(p.slug) ? 'checked' : ''}> ${esc(p.name)}</label>`).join('');
+  const wsName = id => (workspaces.find(w => w.id === id) || {}).name || id;
+  // a user is given only their own workspace's pages (the server refuses any other)
+  const pageOpts = (sel, ws) => shown.filter(p => !ws || p.workspace === ws).map(p => `<label class="check"><input type="checkbox" value="${esc(p.slug)}" ${sel.includes(p.slug) ? 'checked' : ''}> ${esc(p.name)}</label>`).join('');
   const rowHtml = u => `<tr data-u="${esc(u.id)}">
-      <td>${esc(u.email)}<div class="muted">${esc(u.name)}${u.active ? '' : ' · <span class="pill no">deactivated</span>'}${u.locked ? ' · <span class="pill warn">locked</span>' : ''}${u.reset_requested ? ` · asked for a reset ${ago(u.reset_requested)}` : ''}</div></td>
-      <td><select data-role><option value="editor" ${u.role === 'editor' ? 'selected' : ''}>Editor</option><option value="owner" ${u.role === 'owner' ? 'selected' : ''}>Owner</option><option value="super" ${u.role === 'super' ? 'selected' : ''}>Admin</option></select></td>
-      <td data-pages>${pageOpts(u.pages)}</td><td class="muted">${u.last_login ? ago(u.last_login) : 'never'}</td>
+      <td class="wrap">${esc(u.email)}<div class="muted">${esc(u.name)}${u.workspace ? ` · ${esc(wsName(u.workspace))}` : ''}${u.active ? '' : ' · <span class="pill no">deactivated</span>'}${u.locked ? ' · <span class="pill warn">locked</span>' : ''}${u.reset_requested ? ` · asked for a reset ${ago(u.reset_requested)}` : ''}</div></td>
+      <td><select data-role><option value="editor" ${roleOf(u) === 'editor' ? 'selected' : ''}>Editor</option><option value="owner" ${roleOf(u) === 'owner' ? 'selected' : ''}>Owner</option><option value="super" ${roleOf(u) === 'super' ? 'selected' : ''}>Admin</option></select></td>
+      <td data-pages>${roleOf(u) === 'super' ? '<span class="muted">every page</span>' : pageOpts(u.pages, u.workspace)}</td><td class="muted">${u.last_login ? ago(u.last_login) : 'never'}</td>
       <td><button class="btn small" data-save>Save</button> <button class="btn small" data-reset>Reset link</button> <button class="btn small ${u.active ? 'danger' : ''}" data-act>${u.active ? 'Deactivate' : 'Activate'}</button></td></tr>`;
   $('#main').innerHTML = adminTabs('users') + `<div class="grid">
-    <form class="panel grid" id="inv"><h3>Invite a user</h3><div class="row"><input type="email" name="email" placeholder="Email" required><input type="text" name="name" placeholder="Name">
-      <select name="role"><option value="editor">Editor</option><option value="super">Admin</option></select></div>
+    <form class="panel grid" id="inv"><h3>Invite a user</h3><div class="muted">Testers are invited under Testers (with their own workspace). Here: an editor or owner of an existing workspace, or another admin.</div>
+      <div class="row"><input type="email" name="email" placeholder="Email" required><input type="text" name="name" placeholder="Name">
+      <select name="role"><option value="editor">Editor</option><option value="owner">Owner</option><option value="super">Admin</option></select>
+      <select name="workspace"><option value="">Workspace (or the pages' own)</option>${workspaces.map(w => `<option value="${esc(w.id)}">${esc(w.name)}</option>`).join('')}</select></div>
       <div>${pageOpts([])}</div><div class="row"><button class="btn primary">Invite</button></div><div id="invout"></div></form>
     <div class="panel"><div class="adminscroll"><table id="users"><tr><th>User</th><th>Role</th><th>Pages</th><th>Last sign-in</th><th></th></tr>${users.map(rowHtml).join('')}</table></div></div></div>`;
   // one row drawn again (the others keep what the admin ticked and has not saved yet)
@@ -1165,7 +1181,7 @@ async function adminUsers() {
     e.preventDefault(); const f = e.target;
     oneAtATime(f.querySelector('button.primary'), async () => {
       try { const r = await api('/api/admin/users', { method: 'POST', body: { email: f.email.value, name: f.name.value, role: f.role.value,
-              pages: [...f.querySelectorAll('input[type=checkbox]:checked')].map(c => c.value) } });
+              ...(f.workspace.value ? { workspace: f.workspace.value } : {}), pages: [...f.querySelectorAll('input[type=checkbox]:checked')].map(c => c.value) } });
             // the link stays until the admin leaves this tab: it cannot be shown again
             $('#invout').innerHTML = `<div class="muted">${r.emailed ? 'Invitation emailed. ' : ''}Send this one-time link to ${esc(r.user.email)} (valid 48 hours):</div><div class="linkbox">${esc(r.setup_link)}</div>`;
             const nu = { ...r.user, last_login: null, reset_requested: null, locked: false };
@@ -1180,13 +1196,13 @@ async function adminUsers() {
       // the row was drawn: what another admin changed meanwhile is kept, and the row shows it once saved
       const boxes = [...tr.querySelectorAll('[data-pages] input[data-dirty]')].filter(c => c.checked !== u.pages.includes(c.value));
       const body = {}, add = boxes.filter(c => c.checked).map(c => c.value), remove = boxes.filter(c => !c.checked).map(c => c.value);
-      if (role.dataset.dirty && role.value !== u.role) body.role = role.value;
+      if (role.dataset.dirty && role.value !== roleOf(u)) body.role = role.value;
       if (add.length) body.pages_add = add;
       if (remove.length) body.pages_remove = remove;
       if (!Object.keys(body).length) return toast('Nothing to save: nothing was changed in this row');
       const sent = { pages: Object.fromEntries(boxes.map(c => [c.value, c.checked])), role: body.role };
       try { const r = await api(`/api/admin/users/${id}`, { method: 'PATCH', body }); Object.assign(u, r.user); draw(u, tr, sent); toast('Saved'); }
-      catch (err) { role.value = u.role; delete role.dataset.dirty; toast(err.message); }
+      catch (err) { role.value = roleOf(u); delete role.dataset.dirty; toast(err.message); }
     });
     tr.querySelector('[data-reset]').onclick = e => oneAtATime(e.target, async () => {
       try { const r = await api(`/api/admin/users/${id}/reset`, { method: 'POST', body: {} });
@@ -1203,21 +1219,26 @@ async function adminUsers() {
 }
 async function adminPages() {
   const nav = S.nav;
-  const { pages } = await api('/api/admin/pages');
+  const [{ pages }, { workspaces }] = await Promise.all([api('/api/admin/pages'), api('/api/admin/workspaces')]);
   if (nav !== S.nav) return;
+  const wsName = id => (workspaces.find(w => w.id === id) || {}).name || id || '—';
+  // every page of every workspace; the SocialPilot account is the one the onboarding routine linked (never typed in)
   $('#main').innerHTML = adminTabs('pages') + `<div class="grid">
-    <form class="panel grid" id="add"><h3>Add a Facebook page</h3><div class="row"><input type="text" name="name" placeholder="Page name" required>
-      <input type="text" name="fb_page_id" placeholder="Facebook page ID"><input type="text" name="socialpilot_login_id" placeholder="SocialPilot account (loginId)">
+    <form class="panel grid" id="add"><h3>Add a Facebook page</h3><div class="muted">Testers add their own pages under Pages. A page added here starts as a draft in the workspace chosen; it goes live from its owner's Go live.</div>
+      <div class="row"><select name="workspace" required><option value="">Workspace…</option>${workspaces.map(w => `<option value="${esc(w.id)}">${esc(w.name)}</option>`).join('')}</select>
+      <input type="text" name="name" placeholder="Page name" required><input type="text" inputmode="url" name="fb_page_url" placeholder="Facebook page address">
       <input type="text" name="timezone" placeholder="Time zone (e.g. America/New_York)" list="tzlist">${zoneList()}</div><div class="row"><button class="btn primary">Add page</button></div></form>
-    <div class="panel"><div class="adminscroll"><table><tr><th>Page</th><th>SocialPilot</th><th>Sources</th><th>Reference documents</th><th></th></tr>${pages.map(p => `<tr>
-      <td><b>${esc(p.name)}</b> ${p.archived ? '<span class="pill">archived</span>' : ''}<div class="muted">${esc(p.slug)} · FB ${esc(p.fb_page_id || '—')}</div></td>
-      <td>${esc(p.socialpilot_login_id || '—')}</td><td>${p.source_count}</td>
+    <div class="panel"><div class="adminscroll"><table id="allpages"><tr><th>Page</th><th>Workspace</th><th>SocialPilot</th><th>Sources</th><th>Reference documents</th><th></th></tr>${pages.map(p => `<tr data-page="${esc(p.slug)}">
+      <td><b>${esc(p.name)}</b> ${statusPill(p.status)} ${p.archived ? '<span class="pill">archived</span>' : ''}<div class="muted">${esc(p.slug)} · FB ${esc(p.fb_page_id || '—')}</div></td>
+      <td>${esc(wsName(p.workspace))}</td><td>${p.socialpilot_login_id ? esc(p.socialpilot_login_id) : '<span class="muted">not linked yet</span>'}</td><td>${p.source_count}</td>
       <td>${Object.entries(p.docs).map(([t, d]) => { const a = d.versions.find(v => v.v === d.active);
         return `<div class="muted">${esc(t)}: ${d.active ? 'v' + d.active : '<span class="pill warn">missing</span>'}${a && a.image_only ? ' <span class="pill warn">almost no text</span>' : ''}</div>`; }).join('')}</td>
-      <td><a class="btn small" href="#/admin/page/${esc(p.slug)}">Manage</a></td></tr>`).join('')}</table></div></div></div>`;
+      <td><a class="btn small" href="#/admin/page/${esc(p.slug)}">Manage</a> ${p.status === 'live' ? `<button class="btn small danger" data-pause="${esc(p.slug)}">Pause</button>`
+        : p.status === 'paused' ? `<button class="btn small" data-resume="${esc(p.slug)}">Resume</button>` : ''}</td></tr>`).join('')}</table></div></div></div>`;
+  wirePauses(() => { if (nav === S.nav) adminPages(); });
   $('#add').onsubmit = e => { e.preventDefault(); const f = e.target;
     oneAtATime(f.querySelector('button.primary'), async () => {
-      try { const r = await api('/api/admin/pages', { method: 'POST', body: { name: f.name.value, fb_page_id: f.fb_page_id.value, socialpilot_login_id: f.socialpilot_login_id.value, timezone: f.timezone.value } });
+      try { const r = await api('/api/admin/pages', { method: 'POST', body: { workspace: f.workspace.value, name: f.name.value, fb_page_url: f.fb_page_url.value, timezone: f.timezone.value } });
             await loadMe(); header(); go(`/admin/page/${r.page.slug}`); } catch (err) { toast(err.message); } }); };   // in the page picker at once
 }
 // the time zones to pick from (the server stores old names as their new one)
@@ -1226,11 +1247,9 @@ function zoneList() {
   try { zones = Intl.supportedValuesOf('timeZone'); } catch (e) {}
   return `<datalist id="tzlist">${['UTC', ...zones].map(z => `<option value="${esc(z)}">`).join('')}</datalist>`;
 }
-// Posts per day as the routine makes them: config.yaml posting.daily_cap (20), the same for every
-// page. The stored per-page field (8 for both pages, the old default) is used by nothing, so it is
-// shown read-only until the owner decides what it should mean (wiring it up as it is would cut
-// both pages to 8 a day).
-const DAILY_POSTS = 20;
+// The page's budgets (docs/PRODUCT.md "Budgets"): what it makes a day, and the most it may (the super's
+// limits; the page's owner may lower its budgets, never raise them above these)
+const BUDGET_FIELDS = ['posts_per_day', 'premium_per_day'], LIMIT_FIELDS = ['limit_posts_per_day', 'limit_premium_per_day'];
 async function adminPage(slug) {
   const nav = S.nav;
   const [{ pages, doc_types, doc_max_bytes }, src] = await Promise.all([api('/api/admin/pages'), api(`/api/admin/pages/${slug}/sources`)]);
@@ -1238,13 +1257,23 @@ async function adminPage(slug) {
   const p = pages.find(x => x.slug === slug);
   if (!p) return ($('#main').innerHTML = '<div class="empty">No such page</div>');
   const th = p.theme || {};
-  $('#main').innerHTML = adminTabs('pages') + `<h2>${esc(p.name)}</h2><div class="grid">
-    <form class="panel grid" id="set"><h3>Settings</h3><div class="row">
+  $('#main').innerHTML = adminTabs('pages') + `<div class="row"><h2 style="margin:0">${esc(p.name)}</h2>${statusPill(p.status)}<span class="spacer"></span>
+      <a class="btn small" href="#/pages/${esc(slug)}">Owner's view</a>${p.status === 'live' ? `<button class="btn small danger" data-pause="${esc(slug)}">Pause</button>`
+        : p.status === 'paused' ? `<button class="btn small" data-resume="${esc(slug)}">Resume</button>` : ''}</div><div class="grid" style="margin-top:16px">
+    <form class="panel grid" id="set"><h3>Settings</h3>
+      <div class="muted">SocialPilot account: ${p.socialpilot_login_id ? `<b>${esc(p.socialpilot_login_id)}</b>` : 'not linked yet'} (linked by the onboarding routine at Go live, never typed in here)${p.status === 'failed' && p.onboarding.error ? ` · going live stopped: ${esc(p.onboarding.error)}` : ''}</div>
+      <div class="row">
       <label class="muted">Name <input type="text" name="name" value="${esc(p.name)}"></label>
       <label class="muted">Facebook page ID <input type="text" name="fb_page_id" value="${esc(p.fb_page_id)}"></label>
-      <label class="muted">SocialPilot loginId <input type="text" name="socialpilot_login_id" value="${esc(p.socialpilot_login_id)}"></label>
-      <label class="muted">Time zone <input type="text" name="timezone" value="${esc(p.timezone)}" list="tzlist"></label>${zoneList()}
-      <span class="muted" title="Set in the routine's settings (config.yaml posting.daily_cap) for every page; the owner decides what a per-page setting should mean">Posts per day: <b>${DAILY_POSTS}</b> (the hourly routine's cap for every page; not changed here)</span></div>
+      <label class="muted">Facebook address <input type="text" inputmode="url" name="fb_page_url" value="${esc(p.fb_page_url)}"></label>
+      <label class="muted">Language <input type="text" name="language" value="${esc(p.language)}"></label>
+      <label class="muted">Time zone <input type="text" name="timezone" value="${esc(p.timezone)}" list="tzlist"></label>${zoneList()}</div>
+      <label class="muted">Niche <textarea name="niche" rows="2" maxlength="400">${esc(p.niche)}</textarea></label>
+      <div class="row"><label class="muted">Posts a day <input type="number" name="posts_per_day" min="1" max="40" value="${p.posts_per_day}" style="width:76px"></label>
+        <label class="muted">at most <input type="number" name="limit_posts_per_day" min="1" max="40" value="${p.limits.posts_per_day}" style="width:76px"></label>
+        <label class="muted">Premium cards a day <input type="number" name="premium_per_day" min="0" max="40" value="${p.premium_per_day}" style="width:76px"></label>
+        <label class="muted">at most <input type="number" name="limit_premium_per_day" min="0" max="40" value="${p.limits.premium_per_day}" style="width:76px"></label>
+        <span class="muted">(the owner may lower the budgets, never raise them above these; the workspace's limits apply too)</span></div>
       <div class="row"><label class="muted">Accent <input type="color" name="accent" value="${esc(th.accent || '#ffe01b')}"></label>
         <label class="muted">Background <input type="color" name="bg" value="${esc(th.bg || '#0a0a0a')}"></label>
         <label class="muted">Text <input type="color" name="ink" value="${esc(th.ink || '#ffffff')}"></label>
@@ -1264,16 +1293,24 @@ async function adminPage(slug) {
           ${d.versions.length ? `<div class="adminscroll"><table><tr><th>Version</th><th>File</th><th>Size</th><th>Pages</th><th>Text read</th><th>Uploaded</th><th></th></tr>${d.versions.slice().reverse().map(v => `<tr><td>v${v.v} ${v.v === d.active ? '<span class="pill ok">active</span>' : ''}</td>
             <td>${esc(v.filename)}</td><td>${fmtBytes(v.size)}</td><td>${v.pages || '?'}</td><td>${docTextCell(v)}</td><td class="muted wrap">${when(v.at)} · ${esc(v.by)}</td>
             <td>${v.v === d.active ? '' : `<button class="btn small" data-roll="${v.v}" ${docBusy(key) ? 'disabled' : ''}>Make active</button>`}</td></tr>`).join('')}</table></div>` : '<div class="muted">Not uploaded yet.</div>'}</div>`; }).join('')}</div></div>`;
-  const FIELDS = ['name', 'fb_page_id', 'socialpilot_login_id', 'timezone'], THEME = { accent: '#ffe01b', bg: '#0a0a0a', ink: '#ffffff', logo_text: '' };
+  const FIELDS = ['name', 'fb_page_id', 'fb_page_url', 'language', 'timezone', 'niche', ...BUDGET_FIELDS, ...LIMIT_FIELDS], THEME = { accent: '#ffe01b', bg: '#0a0a0a', ink: '#ffffff', logo_text: '' };
+  // a field as the page holds it (a limit is under page.limits)
+  const stored = (pg, k) => (LIMIT_FIELDS.includes(k) ? (pg.limits || {})[k.slice(6)] : pg[k]);
   // each field as drawn (as its input shows it: a colour as #rrggbb): one typed in and put back is not a change
   const drawn = {}, asShown = (el, v) => { const i = document.createElement('input'); i.type = el.type; i.value = v; return i.value; };
   for (const k of [...FIELDS, ...Object.keys(THEME)]) drawn[k] = $('#set')[k].value;
+  wirePauses(() => { if (location.hash.replace(/\/+$/, '') === `#/admin/page/${slug}`) adminPage(slug); });
   $('#set').onsubmit = e => { e.preventDefault(); const f = e.target;
     oneAtATime(f.querySelector('button.primary'), async () => {
       // only the fields the admin changed here: another admin's change to the others is kept
       const body = {}, theme = {};
       for (const k of [...FIELDS, ...Object.keys(THEME)]) if (f[k].value === drawn[k]) delete f[k].dataset.dirty;
-      for (const k of FIELDS) if (f[k].dataset.dirty) body[k] = f[k].value;
+      const limits = {};
+      for (const k of FIELDS) if (f[k].dataset.dirty) {
+        if (LIMIT_FIELDS.includes(k)) limits[k.slice(6)] = Number(f[k].value);
+        else body[k] = BUDGET_FIELDS.includes(k) ? Number(f[k].value) : f[k].value;
+      }
+      if (Object.keys(limits).length) body.limits = limits;
       for (const k of Object.keys(THEME)) if (f[k].dataset.dirty) theme[k] = f[k].value;
       if (Object.keys(theme).length) body.theme = theme;
       if (!Object.keys(body).length) return toast('Nothing to save: no setting was changed');
@@ -1281,12 +1318,14 @@ async function adminPage(slug) {
             Object.assign(p, r.page); Object.assign(th, r.page.theme);
             if (f.isConnected) {
               $('#main h2').textContent = r.page.name;
+              const pill = $('#main h2 + .pill');
+              if (pill) pill.outerHTML = statusPill(r.page.status);
               // the form shows what is stored now (another admin's change too, a name cut to length),
               // except a field typed in again while this was saved
               for (const k of [...FIELDS, ...Object.keys(THEME)]) {
-                const sent = k in THEME ? theme[k] : body[k];
-                if (sent !== undefined && f[k].value === sent) delete f[k].dataset.dirty;
-                const now = (k in THEME ? (r.page.theme || {})[k] || THEME[k] : r.page[k]) || '';
+                const sent = k in THEME ? theme[k] : LIMIT_FIELDS.includes(k) ? limits[k.slice(6)] : body[k];
+                if (sent !== undefined && f[k].value === String(sent)) delete f[k].dataset.dirty;
+                const now = (k in THEME ? (r.page.theme || {})[k] || THEME[k] : stored(r.page, k)) ?? '';
                 if (!f[k].dataset.dirty) f[k].value = now;
                 drawn[k] = asShown(f[k], now);
               }
@@ -1387,8 +1426,9 @@ async function docRetry(what, fn) {
     }
   }
 }
-async function uploadDoc(slug, t, file, before) {
-  const key = `${slug}/${t}`, base = `/api/admin/pages/${slug}/docs/${t}`;
+// base: the document's route (Admin > Pages, or the owner's own: /api/pages/<slug>/docs/<type>)
+async function uploadDoc(slug, t, file, before, base = `/api/admin/pages/${slug}/docs/${t}`) {
+  const key = `${slug}/${t}`;
   const note = n => { DOC_NOTES.set(key, n); drawDocNote(key); };
   const kept = before ? `: v${before.v} is still the active version` : '';
   try {
@@ -1674,7 +1714,7 @@ async function templatesView(admin, fromPoll) {
         ${waiting ? `<span class="pill warn">${waiting} waiting for approval</span>` : ''}<span class="spacer"></span>
         ${r.can_convert ? `<button class="btn" id="tpl-convert" ${open || !r.doc ? 'disabled' : ''}>Convert templates again</button>` : ''}</div>
       <div class="muted">The Studio routine turns each template of the page's templates document into a template it can draw, and draws it with made-up text on a stand-in photo. Compare each one with the template you know, then approve it, or reject it and say what is wrong: it is converted again with your note. Approved templates are offered in the Studio's ideas next to the page's usual layouts, never instead of them. The format draws boxes of photo and text: a cut-out subject, a number behind the subject, angled splits or callout lines come out as plain boxes, so judge the preview as it is drawn.</div>
-      <div>${r.doc ? `Templates document: v${r.doc.version} · ${esc(r.doc.filename)} · ${r.doc.pages || '?'} pages` : '<span class="pill warn">no templates document</span> An admin uploads it under Admin &gt; Pages.'}</div>
+      <div>${r.doc ? `Templates document: v${r.doc.version} · ${esc(r.doc.filename)} · ${r.doc.pages || '?'} pages` : '<span class="pill warn">no templates document</span> The page\'s owner uploads it on the page\'s Upload documents step.'}</div>
       ${r.job ? tplJobLine(r.job) : ''}</div>
     ${r.templates.length ? r.templates.map(t => tplCard(r, t)).join('')
       : `<div class="empty">${open ? 'Each template appears here as soon as it is converted.' : 'No templates converted yet.'}</div>`}</div>`;
@@ -1716,6 +1756,467 @@ async function templatesView(admin, fromPoll) {
   later();
 }
 
+// ------------------------------------------------------------------ pages (owners): connect a page, Go live
+// docs/PRODUCT.md "A page's life": draft -> (Go live) -> going_live -> live <-> paused, going_live -> failed
+// (with the reason, and Try again). The four steps save as they go: a page left half set up is where its
+// owner left it. What Go live still needs comes from the server (`missing`), never worked out here.
+const STATUS_LABEL = { draft: 'draft', going_live: 'going live', live: 'live', paused: 'paused', failed: 'failed' };
+const statusPill = st => `<span class="pill ${esc(st)}" data-status="${esc(st)}">${esc(STATUS_LABEL[st] || st)}</span>`;
+const PAGE_STEPS = [['details', 'Page details'], ['connect', 'Connect in SocialPilot'], ['documents', 'Upload documents'], ['review', 'Go live']];
+// what Go live waits for, in the owner's words, and the step that does it
+const NEEDS = [['fb_page_url', 'details', 'The page\'s Facebook address'], ['niche', 'details', 'The page\'s niche, in a sentence'],
+               ['socialpilot_connected', 'connect', 'The page connected in SocialPilot (the tick)'],
+               ['templates', 'documents', 'The post templates document'], ['tone', 'documents', 'The caption language and tone document']];
+const NEED_TODO = { fb_page_url: 'add the page\'s Facebook address', niche: 'describe the page\'s niche', socialpilot_connected: 'connect the page in SocialPilot and tick the box',
+                    templates: 'upload the post templates document', tone: 'upload the caption language and tone document' };
+const DOC_ABOUT = { templates: ['Required', 'The post layouts the page uses. Each one becomes a card template the editors approve on the Templates screen.'],
+                    visual: ['Optional', 'The look: colours, fonts, the kind of photos. Helps the visuals match the page.'],
+                    tone: ['Required', 'How captions are written: the language, the voice, what to say and never say.'] };
+const LANGUAGES = ['English', 'Spanish', 'Portuguese', 'French', 'German', 'Italian', 'Dutch', 'Hindi', 'Arabic', 'Indonesian', 'Tagalog', 'Turkish'];
+const roleOf = u => (u ? (u.role === 'admin' ? 'super' : u.role || 'editor') : '');
+const myRole = () => roleOf(S.me && S.me.user);
+// who adds pages: an owner, and the super when they have a workspace of their own (the open-access Owner)
+const addsPages = () => !!(S.me && S.me.user.workspace && ['owner', 'super'].includes(myRole()));
+// where someone starts: an owner with no page yet connects their first one; everyone else in the Studio
+const home = () => (addsPages() && !S.pages.length ? '/pages' : '/studio');
+const pageUrl = (slug, more = '') => `/api/pages/${encodeURIComponent(slug)}${more}`;
+const firstPage = () => `<div class="hero panel" id="firstpage"><h2>Connect your first page</h2>
+    <div class="muted">Four short steps, then Bore Studio makes posts for your Facebook page every hour. Nothing is published until one of your editors approves it.</div>
+    <ol class="howto"><li><b>Page details</b>: its name, Facebook address, niche, language and time zone.</li>
+      <li><b>Connect in SocialPilot</b>: add the page there, so approved posts can be scheduled.</li>
+      <li><b>Upload documents</b>: your post templates, visual references and caption tone.</li>
+      <li><b>Go live</b>: the onboarding routine sets the page up; you watch each step here.</li></ol>
+    <div><a class="btn primary" href="#/pages/new">Connect your first page</a></div></div>`;
+// a URL in text the product owner wrote is a link (everything else stays text)
+const linkify = t => esc(t).replace(/https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)]/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+
+async function pagesView() {
+  const nav = S.nav;
+  const r = await api('/api/pages');
+  if (nav !== S.nav) return;
+  const pages = r.pages.filter(p => !p.archived);
+  if (!pages.length) {
+    $('#main').innerHTML = addsPages() ? firstPage() : '<div class="empty">No pages are assigned to you yet. Ask the page\'s owner.</div>';
+    return;
+  }
+  $('#main').innerHTML = `<div class="row"><h2>Pages</h2><span class="spacer"></span>${addsPages() ? '<a class="btn primary" href="#/pages/new">Connect a page</a>' : ''}</div>
+    <div class="grid pagelist">${pages.map(p => `<div class="card pagecard" data-page="${esc(p.slug)}">
+      <div class="row"><h3 style="margin:0">${esc(p.name)}</h3>${statusPill(p.status)}<span class="spacer"></span>${pageButtons(p)}</div>
+      <div class="muted">${p.fb_page_url ? esc(p.fb_page_url) : p.docs ? 'No Facebook address yet' : ''}${myRole() === 'super' && p.workspace ? ` · workspace ${esc(p.workspace)}` : ''}</div>
+      ${p.status === 'failed' && p.onboarding && p.onboarding.error ? `<div class="job err">Going live stopped: ${esc(p.onboarding.error)}</div>` : ''}
+      ${p.status === 'paused' && p.paused_by ? `<div class="muted">Paused by ${esc(p.paused_by)}: no hourly posts, nothing published, Studio read only.</div>` : ''}</div>`).join('')}</div>`;
+  wirePauses(() => { if (nav === S.nav) pagesView(); });
+}
+// what can be done with a page from the list (the ones its owner may manage: `docs` is theirs to see)
+function pageButtons(p) {
+  const s = esc(p.slug), manage = !!p.docs;
+  const open = { draft: 'Continue setting up', going_live: 'Follow the steps', failed: 'See why and try again' }[p.status];
+  return [manage && open ? `<a class="btn small primary" href="#/pages/${s}">${open}</a>` : '',
+          ['live', 'paused'].includes(p.status) ? `<a class="btn small" href="/review.html">Approvals</a> <a class="btn small" href="#/studio" data-studio="${s}">Studio</a>` : '',
+          manage && ['live', 'paused'].includes(p.status) ? `<a class="btn small" href="#/pages/${s}/details">Settings</a>` : '',
+          manage && p.status === 'live' ? `<button class="btn small danger" data-pause="${s}">Pause</button>` : '',
+          manage && p.status === 'paused' ? `<button class="btn small primary" data-resume="${s}">Resume</button>` : ''].filter(Boolean).join(' ');
+}
+// Pause and Resume, and the Studio links (they open the Studio on that page)
+function wirePauses(after) {
+  document.querySelectorAll('#main [data-studio]').forEach(a => a.onclick = () => setPage(a.dataset.studio));
+  document.querySelectorAll('#main [data-pause], #main [data-resume]').forEach(b => b.onclick = () => oneAtATime(b, async () => {
+    const pause = !!b.dataset.pause, slug = b.dataset.pause || b.dataset.resume;
+    if (pause && !confirm('Pause this page? No hourly posts are made, nothing is published and its Studio is read only until it is resumed.')) return;
+    try { await api(pageUrl(slug, pause ? '/pause' : '/resume'), { method: 'POST', body: {} });
+          toast(pause ? 'Paused: nothing is made or published until it is resumed' : 'Resumed: the page is live again'); await loadMe().catch(() => {}); header(); }
+    catch (e) { toast(e.message); }
+    after();
+  }));
+}
+
+function pageStepper(slug, cur, r) {
+  const p = r && r.page, miss = new Set((r && r.missing) || []);
+  const done = { details: p && !miss.has('fb_page_url') && !miss.has('niche'), connect: p && !miss.has('socialpilot_connected'),
+                 documents: p && !miss.has('templates') && !miss.has('tone'), review: p && p.status !== 'draft' };
+  // once Go live was pressed: its status first, and what the onboarding routine proposed (sources, playbook) last
+  const steps = p && p.status !== 'draft' ? [['status', 'Status'], ...PAGE_STEPS, ['sources', 'Sources and playbook']] : PAGE_STEPS;
+  return `<div class="steps wizard">${steps.map(([k, l], i) => {
+    const n = p && p.status !== 'draft' ? i : i + 1, label = k === 'status' || k === 'sources' ? l : `${done[k] && k !== cur ? '✓' : `${n}.`} ${l}`;
+    return slug ? `<a href="#/pages/${esc(slug)}/${k}" class="${k === cur ? 'on' : ''} ${done[k] ? 'done' : ''}">${label}</a>`
+                : `<a class="${k === cur ? 'on' : ''}" aria-disabled="true">${label}</a>`; }).join('')}</div>`;
+}
+const firstStep = r => (r.missing.some(m => m === 'fb_page_url' || m === 'niche') ? 'details' : r.missing.includes('socialpilot_connected') ? 'connect'
+  : r.missing.some(m => m === 'templates' || m === 'tone') ? 'documents' : 'review');
+const browserZone = () => { try { const z = Intl.DateTimeFormat().resolvedOptions().timeZone; return /^[A-Z][a-z]+\/[A-Za-z_\/+-]+$/.test(z) ? z : 'America/New_York'; } catch (e) { return 'America/New_York'; } };
+
+async function pageView(slug, step) {
+  const nav = S.nav;
+  if (slug === 'new') return pageDetails(null, null);
+  if (step === 'status') return pageStatus(slug);
+  const r = await api(pageUrl(slug));
+  if (nav !== S.nav) return;
+  if (!r.page.docs) {                                                // (an editor: name and status only)
+    $('#main').innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">${esc(r.page.name)}</h2>${statusPill(r.page.status)}</div>
+      <div class="muted">Only the page's owner sets it up.</div></div>`;
+    return;
+  }
+  const s = step || (r.page.status === 'draft' ? firstStep(r) : 'status');
+  if (s === 'status') return pageStatus(slug);
+  if (!step) history.replaceState(null, '', `#/pages/${slug}/${s}`);
+  return ({ details: pageDetails, connect: pageConnect, documents: pageDocuments, review: pageReview, sources: pageSources }[s] || pageDetails)(slug, r);
+}
+
+// 1. Page details. A new page is made on Save; an existing one sends only what was changed here.
+async function pageDetails(slug, r) {
+  const p = r ? r.page : { name: '', fb_page_url: '', niche: '', language: 'English', timezone: browserZone() };
+  const draft = !r || p.status === 'draft';
+  $('#main').innerHTML = `${pageStepper(slug, 'details', r)}<form class="panel grid formgrid" id="pdet">
+    <h2>${r ? esc(p.name) : 'Connect a Facebook page'}</h2>
+    <label>Page name<input type="text" name="name" value="${esc(p.name)}" required maxlength="100" placeholder="Demo Page"></label>
+    <label>Facebook page address<input type="text" inputmode="url" name="fb_page_url" value="${esc(p.fb_page_url)}" placeholder="https://www.facebook.com/yourpage"></label>
+    <label>Niche<textarea name="niche" rows="2" maxlength="400" placeholder="In one sentence: what the page posts about, for whom">${esc(p.niche)}</textarea></label>
+    <div class="two-col"><label>Caption language<input type="text" name="language" value="${esc(p.language)}" list="langlist" maxlength="40"></label>
+      <label>Time zone<input type="text" name="timezone" value="${esc(p.timezone)}" list="tzlist" placeholder="America/New_York"></label></div>
+    <datalist id="langlist">${LANGUAGES.map(l => `<option value="${l}">`).join('')}</datalist>${zoneList()}
+    ${r ? `<div class="two-col"><label>Posts a day<input type="number" name="posts_per_day" min="1" max="${p.limits.posts_per_day}" value="${p.posts_per_day}">
+        <span class="muted">At most ${p.limits.posts_per_day} (set by the product owner)</span></label>
+      <label>Premium cards a day<input type="number" name="premium_per_day" min="0" max="${p.limits.premium_per_day}" value="${p.premium_per_day}">
+        <span class="muted">At most ${p.limits.premium_per_day}; past it, posts use the page's own templates</span></label></div>` : ''}
+    <div class="row">${slug ? '' : '<a class="btn" href="#/pages">Cancel</a>'}<span class="spacer"></span>
+      <button class="btn primary">${draft ? 'Save and continue' : 'Save'}</button></div></form>`;
+  const f = $('#pdet'), FIELDS = ['name', 'fb_page_url', 'niche', 'language', 'timezone', ...(r ? ['posts_per_day', 'premium_per_day'] : [])];
+  const drawn = Object.fromEntries(FIELDS.map(k => [k, f[k].value]));
+  f.onsubmit = e => { e.preventDefault();
+    oneAtATime(f.querySelector('button.primary'), async () => {
+      try {
+        if (!r) {
+          const made = await api('/api/pages', { method: 'POST', body: Object.fromEntries(FIELDS.map(k => [k, f[k].value])) });
+          await loadMe().catch(() => {}); header();
+          return go(`/pages/${made.page.slug}/connect`);
+        }
+        // only what was changed here: what someone else saved meanwhile is kept
+        const body = {};
+        for (const k of FIELDS) if (f[k].dataset.dirty && f[k].value !== drawn[k]) body[k] = k.endsWith('_per_day') ? Number(f[k].value) : f[k].value;
+        if (Object.keys(body).length) {
+          const saved = await api(pageUrl(slug), { method: 'PATCH', body });
+          for (const k of FIELDS) { delete f[k].dataset.dirty; f[k].value = saved.page[k] ?? ''; drawn[k] = f[k].value; }
+          toast('Saved');
+          if (body.name) { await loadMe().catch(() => {}); header(); }
+        } else if (!draft) return toast('Nothing to save: nothing was changed');
+        if (draft && location.hash === `#/pages/${slug}/details`) go(`/pages/${slug}/connect`);
+      } catch (err) { toast(err.message); }
+    }); };
+}
+
+// 2. Connect in SocialPilot: the product owner's own instructions (Admin > Settings), then the tick.
+// The account itself is found and linked by the onboarding routine at Go live, never typed in here.
+async function pageConnect(slug, r) {
+  const p = r.page, fb = p.fb_page_url ? `<a href="${esc(p.fb_page_url)}" target="_blank" rel="noopener">${esc(p.fb_page_url)}</a>` : 'its Facebook address';
+  $('#main').innerHTML = `${pageStepper(slug, 'connect', r)}<div class="panel grid">
+    <h2>Connect ${esc(p.name)} in SocialPilot</h2>
+    <div class="muted">SocialPilot schedules the posts your editors approve. The page has to be added there once, by someone who manages it on Facebook.</div>
+    <ol class="howto">
+      <li><b>Open SocialPilot.</b><div class="connecthelp" id="connecthelp">${r.connect_help ? linkify(r.connect_help)
+        : 'The product owner has not added the SocialPilot connection link yet: ask them for it.'}</div></li>
+      <li><b>Add the Facebook page</b> ${esc(p.name)} (${fb}). Sign in to Facebook as someone who manages the page and allow SocialPilot to post to it.</li>
+      <li><b>Tick the box below.</b> At Go live the onboarding routine finds the page in SocialPilot by its name and address and links it.</li></ol>
+    <label class="tick"><input type="checkbox" id="spdone" ${p.socialpilot_connected ? 'checked' : ''}> I have connected this page in SocialPilot</label>
+    ${p.socialpilot_linked ? '<div><span class="pill ok">Linked by the onboarding routine</span></div>' : ''}
+    <div class="row"><a class="btn" href="#/pages/${esc(slug)}/details">Back</a><span class="spacer"></span>
+      <a class="btn primary" href="#/pages/${esc(slug)}/documents">Continue to documents</a></div></div>`;
+  const box = $('#spdone');
+  box.onchange = async () => {
+    const want = box.checked;
+    box.disabled = true;                                             // (one request per tap)
+    try { const s = await api(pageUrl(slug), { method: 'PATCH', body: { socialpilot_connected: want } });
+          box.checked = !!s.page.socialpilot_connected; r.page = s.page; r.missing = r.missing.filter(m => m !== 'socialpilot_connected').concat(want ? [] : ['socialpilot_connected']);
+          toast(want ? 'Saved: the onboarding routine links it at Go live' : 'Saved: not connected yet'); }
+    catch (e) { box.checked = !want; toast(e.message); }
+    box.disabled = false;
+  };
+}
+
+// 3. Upload documents: the same uploads in parts as Admin > Pages (uploadDoc), on the owner's route
+async function pageDocuments(slug, r) {
+  const p = r.page;
+  $('#main').innerHTML = `${pageStepper(slug, 'documents', r)}<div class="grid">
+    <div class="panel"><h2>Upload the page's documents</h2><div class="muted">PDFs up to ${fmtBytes(r.doc_max_bytes || 50e6)}. They stay private: only the server
+      and the routines read them, nobody can download them here. A new version replaces the active one; earlier versions are kept.</div></div>
+    ${Object.entries(r.doc_types).map(([t, label]) => { const d = p.docs[t], key = `${slug}/${t}`, a = d.versions.find(v => v.v === d.active);
+      const [need, about] = DOC_ABOUT[t] || ['', ''];
+      return `<div class="card doccard" data-t="${esc(t)}" data-doc="${esc(key)}"><div class="row"><h3 style="margin:0">${esc(label)}</h3>
+          <span class="pill ${need === 'Required' ? (a ? 'ok' : 'warn') : ''}">${a ? 'uploaded' : need.toLowerCase()}</span><span class="spacer"></span>
+          <label class="btn small ${a ? '' : 'primary'}" ${docBusy(key) ? 'style="opacity:.5;pointer-events:none"' : ''}>${a ? 'Upload a new version' : 'Upload PDF'}<input type="file" accept="application/pdf,.pdf" hidden data-up ${docBusy(key) ? 'disabled' : ''}></label></div>
+        <div class="muted">${esc(about)}</div>
+        ${a ? `<div class="docnow"><b>v${a.v}</b> · ${esc(a.filename)} · ${a.pages || '?'} pages · ${fmtBytes(a.size)} · ${docTextCell(a)} <span class="muted">· ${when(a.at)}</span></div>` : ''}
+        <div data-docnote>${docNoteHtml(key)}</div>
+        ${d.versions.length > 1 ? `<details><summary class="muted">Earlier versions (${d.versions.length - 1})</summary>${d.versions.filter(v => v.v !== d.active).reverse().map(v => `<div class="row docold">
+          <span>v${v.v} · ${esc(v.filename)} · ${when(v.at)}</span><span class="spacer"></span><button class="btn small" data-roll="${v.v}" ${docBusy(key) ? 'disabled' : ''}>Make active</button></div>`).join('')}</details>` : ''}</div>`; }).join('')}
+    <div class="row"><a class="btn" href="#/pages/${esc(slug)}/connect">Back</a><span class="spacer"></span><a class="btn primary" href="#/pages/${esc(slug)}/review">Continue to Go live</a></div></div>`;
+  const again = () => { if (location.hash === `#/pages/${slug}/documents`) pageView(slug, 'documents').catch(e => toast(e.message)); };
+  document.querySelectorAll('.card[data-t]').forEach(card => {
+    const t = card.dataset.t, key = card.dataset.doc;
+    card.querySelector('[data-up]').onchange = e => {
+      const file = e.target.files[0]; e.target.value = ''; if (!file || docBusy(key)) return;
+      const d = p.docs[t];
+      uploadDoc(slug, t, file, d.versions.find(v => v.v === d.active), pageUrl(slug, `/docs/${t}`)).finally(again);
+    };
+    wireDocNote(key);
+    card.querySelectorAll('[data-roll]').forEach(b => b.onclick = () => oneAtATime(b, async () => {
+      if (docBusy(key)) return toast('Wait until the upload finishes: it makes its own version active');
+      const x = await api(pageUrl(slug, `/docs/${t}`), { method: 'PATCH', body: { active: Number(b.dataset.roll) } }).catch(e => { toast(e.message); return null; });
+      if (x && !docBusy(key)) DOC_NOTES.set(key, { kind: x.conversion && !x.conversion.job ? 'warn' : 'ok', text: `v${b.dataset.roll} is now active.${x.conversion
+        ? ` ${x.conversion.job ? DOC_CONVERTING : x.conversion.error}` : ''}` });
+      again(); }));
+  });
+}
+
+// 4. Review and the red button: off, with what is still needed, until the page is ready
+async function pageReview(slug, r) {
+  const p = r.page, miss = new Set(r.missing), st = p.status, again = st === 'failed';
+  const why = miss.size ? `Not yet: ${[...miss].map(m => NEED_TODO[m] || m).join('; ')}.`
+    : st === 'going_live' ? 'This page is going live: follow the steps on its Status.' : st === 'live' ? 'This page is live.'
+    : st === 'paused' ? 'This page is paused: resume it from Pages.' : '';
+  const ready = !miss.size && ['draft', 'failed'].includes(st);
+  $('#main').innerHTML = `${pageStepper(slug, 'review', r)}<div class="grid">
+    <div class="panel grid"><h2>Go live: ${esc(p.name)}</h2>
+      <ul class="checklist">${NEEDS.map(([k, s, l]) => `<li class="${miss.has(k) ? 'todo' : 'ok'}"><span class="tickmark">${miss.has(k) ? '!' : '✓'}</span>
+        <span>${l}${miss.has(k) ? ` · <a href="#/pages/${esc(slug)}/${s}">${esc(NEED_TODO[k])}</a>` : ''}</span></li>`).join('')}
+        <li class="${p.docs.visual && p.docs.visual.active ? 'ok' : 'opt'}"><span class="tickmark">${p.docs.visual && p.docs.visual.active ? '✓' : '·'}</span><span>Visual references (optional)</span></li></ul>
+      <dl class="summary"><dt>Facebook</dt><dd>${esc(p.fb_page_url || '—')}</dd><dt>Niche</dt><dd>${esc(p.niche || '—')}</dd>
+        <dt>Language</dt><dd>${esc(p.language || '—')}</dd><dt>Time zone</dt><dd>${esc(p.timezone)}</dd>
+        <dt>Budget</dt><dd>${p.posts_per_day} posts and ${p.premium_per_day} premium cards a day</dd></dl></div>
+    <div class="panel grid golivebox"><div class="muted">When you press it, the onboarding routine links the page's SocialPilot account, reads your documents
+      and the page's recent posts, finds sources for the niche, writes the page's playbook, prepares your templates for approval and makes the first posts.
+      Nothing is published until an editor approves it.</div>
+      <div class="row"><button class="btn golive" id="golive" ${ready ? '' : 'disabled'}>${again ? 'Try again: go live on Facebook' : 'Go live on Facebook'}</button>
+        <span class="muted" id="golive-why">${esc(why)}</span></div></div></div>`;
+  $('#golive').onclick = e => oneAtATime(e.target, async () => {
+    try { await api(pageUrl(slug, again ? '/retry' : '/go-live'), { method: 'POST', body: {} });
+          await loadMe().catch(() => {}); header(); go(`/pages/${slug}/status`); }
+    catch (err) {
+      toast(err.message);
+      if (err.status === 400 || err.status === 409) setTimeout(() => { if (location.hash === `#/pages/${slug}/review`) pageView(slug, 'review').catch(() => {}); }, 50);
+    }
+  });
+}
+
+// What the onboarding routine proposed for the page, for its owner to change: the sources collected
+// every hour, and the playbook (the voice, what to post and not, caption and card rules)
+async function pageSources(slug, r) {
+  const nav = S.nav, p = r.page;
+  const src = await api(pageUrl(slug, '/sources'));
+  if (nav !== S.nav) return;
+  const pb = p.playbook, isText = typeof pb === 'string';
+  $('#main').innerHTML = `${pageStepper(slug, 'sources', r)}<div class="grid">
+    <div class="panel grid"><h2>Sources</h2><div class="muted">Where the hourly routine looks for news, every hour: websites, X accounts (https://x.com/handle),
+      subreddits (https://www.reddit.com/r/name/) and web searches (type <b>search</b>, a few words). The onboarding routine proposed these; switch any off, remove or add.</div>
+      ${src.sources.length ? `<div class="adminscroll"><table id="osrc"><tr><th>Source</th><th>Type</th><th>On</th><th></th></tr>${src.sources.map(x => `<tr data-s="${esc(x.id)}">
+        <td class="wrap">${esc(x.url)}${x.label ? `<div class="muted">${esc(x.label)}</div>` : ''}</td><td>${esc(x.type)}</td>
+        <td><input type="checkbox" data-active ${x.active !== false ? 'checked' : ''} aria-label="collected"></td><td><button class="btn small danger" data-del>Remove</button></td></tr>`).join('')}</table></div>`
+        : '<div class="muted">No sources yet: the onboarding routine proposes them when the page goes live.</div>'}
+      <form class="row" id="oaddsrc"><input type="text" name="url" placeholder="https://… or search words" required style="flex:1 1 240px">
+        <select name="type">${src.types.map(t => `<option>${esc(t)}</option>`).join('')}</select><input type="text" name="label" placeholder="Label"><button class="btn">Add source</button></form></div>
+    <form class="panel grid" id="opb"><h2>Playbook</h2><div class="muted">${pb == null ? 'Not written yet: the onboarding routine writes it from your documents and the page\'s own posts.'
+      : 'Written by the onboarding routine from your documents and the page\'s own posts. The routines follow it for every post.'}${isText || pb == null ? '' : ' It is kept as structured text (JSON): keep its braces and quotes.'}</div>
+      <textarea name="playbook" rows="14" spellcheck="${isText}" style="font-family:${isText ? 'inherit' : 'ui-monospace, monospace'};font-size:13px">${esc(pb == null ? '' : isText ? pb : JSON.stringify(pb, null, 2))}</textarea>
+      <div class="row"><button class="btn primary" ${pb == null ? 'disabled' : ''}>Save playbook</button></div></form></div>`;
+  const again = () => { if (location.hash === `#/pages/${slug}/sources`) pageView(slug, 'sources').catch(e => toast(e.message)); };
+  $('#oaddsrc').onsubmit = e => { e.preventDefault(); const f = e.target;
+    oneAtATime(f.querySelector('button'), async () => {
+      try { await api(pageUrl(slug, '/sources'), { method: 'POST', body: { url: f.url.value, type: f.type.value, label: f.label.value } }); again(); }
+      catch (err) { toast(err.message); } }); };
+  document.querySelectorAll('#osrc tr[data-s]').forEach(tr => {
+    const sid = tr.dataset.s, box = tr.querySelector('[data-active]');
+    box.onchange = async () => {
+      box.disabled = true;
+      try { await api(pageUrl(slug, `/sources/${sid}`), { method: 'PATCH', body: { active: box.checked } }); toast('Saved'); }
+      catch (err) { box.checked = !box.checked; toast(err.message); }
+      box.disabled = false;
+    };
+    tr.querySelector('[data-del]').onclick = e => oneAtATime(e.target, async () => {
+      if (!confirm('Remove this source?')) return;
+      try { await api(pageUrl(slug, `/sources/${sid}`), { method: 'DELETE', body: {} }); again(); } catch (err) { toast(err.message); }
+    });
+  });
+  $('#opb').onsubmit = e => { e.preventDefault(); const f = e.target;
+    oneAtATime(f.querySelector('button.primary'), async () => {
+      let playbook = f.playbook.value;
+      // structured as the routine wrote it: sent back only as valid JSON, never broken
+      if (!isText) { try { playbook = JSON.parse(playbook); } catch (err) { return toast('The playbook is not valid JSON any more (a brace or quote is missing): nothing was saved'); } }
+      try { const x = await api(pageUrl(slug), { method: 'PATCH', body: { playbook } }); r.page = { ...p, ...x.page }; delete f.playbook.dataset.dirty; toast('Saved: used from the next hourly run'); }
+      catch (err) { toast(err.message); }
+    }); };
+}
+
+// The page's status: each onboarding step as the routine reports it (asked every 3 s while it goes
+// live), then Live with the ways on, or what went wrong and Try again.
+async function pageStatus(slug, fromPoll) {
+  const nav = S.nav;
+  const [r, o] = await Promise.all([api(pageUrl(slug)), api(pageUrl(slug, '/onboarding'))]);
+  if (nav !== S.nav) return;
+  const ob = o.onboarding, st = ob.status, p = r.page, manage = !!p.docs;
+  const later = () => { clearTimeout(S.poll); if (st === 'going_live') S.poll = setTimeout(() => { if (nav === S.nav) pageStatus(slug, true).catch(() => later()); }, 3000); };
+  const seen = JSON.stringify([ob, p.status]);
+  if (fromPoll && seen === S.obSeen) return later();
+  if (fromPoll && st !== 'going_live') { await loadMe().catch(() => {}); if (nav !== S.nav) return; header(); }   // (live now: in the Studio's page list)
+  S.obSeen = seen;
+  const failedAt = ob.expected.find(x => x.ok === false), now = st === 'going_live' && !failedAt && ob.expected.find(x => x.ok === undefined);
+  const state = x => (x.ok === true ? 'done' : x.ok === false ? 'failed' : x === now ? 'now' : 'wait');
+  const job = ob.job, waiting = st === 'going_live' && job && job.status === 'queued';
+  const head = {
+    draft: `<h2>${esc(p.name)} is not live yet</h2><div class="muted">Finish the steps above, then press Go live.</div>`,
+    going_live: `<h2>${esc(p.name)} is going live</h2><div class="muted">The onboarding routine is setting the page up. Each step shows here as it finishes; this screen updates by itself and you can leave it.</div>
+      ${waiting ? '<div class="job">Waiting for the onboarding routine to start…</div>' : ''}`,
+    live: `<h2><span class="livedot"></span>${esc(p.name)} is live</h2><div class="muted">The hourly routine makes the page's posts within its budget. Nothing is published until an editor approves it, and each approved post is scheduled at least an hour later.</div>
+      <div class="row"><a class="btn primary" href="/review.html">Open approvals</a><a class="btn" href="#/studio" data-studio="${esc(slug)}">Open Studio</a><a class="btn" href="#/templates" data-studio="${esc(slug)}">Templates</a>
+        ${manage ? `<span class="spacer"></span><button class="btn danger" data-pause="${esc(slug)}">Pause</button>` : ''}</div>`,
+    paused: `<h2>${esc(p.name)} is paused</h2><div class="muted">No hourly posts are made, nothing is published and its Studio is read only${p.paused_by ? ` (paused by ${esc(p.paused_by)})` : ''}.</div>
+      ${manage ? `<div class="row"><button class="btn primary" data-resume="${esc(slug)}">Resume</button></div>` : ''}`,
+    failed: `<h2>Going live stopped</h2><div class="job err" role="alert">${esc(ob.error || 'The onboarding routine stopped without saying why.')}</div>
+      <div class="muted">Fix what it says (the steps above lead to each part), then try again.</div>
+      ${manage ? '<div class="row"><button class="btn golive" id="retry">Try again</button></div>' : ''}`,
+  }[st] || '';
+  $('#main').innerHTML = `${pageStepper(manage ? slug : '', 'status', r)}<div class="grid"><div class="panel grid statushead" data-st="${esc(st)}">${head}</div>
+    ${st !== 'draft' && (st === 'going_live' || ob.steps.length) ? `<div class="panel"><h3>Going live, step by step</h3><ol class="progress">${ob.expected.map(x => `<li class="${state(x)}" data-step="${esc(x.step)}">
+      <span class="dot" aria-hidden="true"></span><div><b>${esc(x.label)}</b>${x.detail ? `<div class="muted">${esc(x.detail)}</div>` : ''}
+      ${state(x) === 'now' ? '<div class="muted">Under way…</div>' : ''}</div><span class="muted">${x.at ? esc(ago(x.at)) : ''}</span></li>`).join('')}</ol>
+      ${ob.started_at ? `<div class="muted">Started ${esc(when(ob.started_at))}${ob.done_at ? ` · live since ${esc(when(ob.done_at))}` : ''}</div>` : ''}</div>` : ''}</div>`;
+  wirePauses(() => { if (nav === S.nav) pageStatus(slug); });
+  const rt = $('#retry');
+  if (rt) rt.onclick = () => oneAtATime(rt, async () => {
+    try { await api(pageUrl(slug, '/retry'), { method: 'POST', body: {} }); toast('Started again'); }
+    catch (e) { toast(e.message); }
+    if (nav === S.nav) pageStatus(slug);
+  });
+  later();
+}
+
+// ------------------------------------------------------------------ the workspace's editors (owners)
+async function workspaceView() {
+  const nav = S.nav;
+  const [w, au] = await Promise.all([api('/api/workspace'), api('/api/workspace/audit?days=7').catch(() => ({ entries: [] }))]);
+  if (nav !== S.nav) return;
+  const pages = w.pages, editors = w.users.filter(x => roleOf(x) === 'editor');
+  const boxes = sel => pages.length ? pages.map(p => `<label class="check"><input type="checkbox" value="${esc(p.slug)}" ${sel.includes(p.slug) ? 'checked' : ''}> ${esc(p.name)}</label>`).join('')
+    : '<span class="muted">No pages yet</span>';
+  const rowHtml = u => `<tr data-u="${esc(u.id)}"><td class="wrap">${esc(u.email)}<div class="muted">${esc(u.name)}${u.active ? '' : ' · <span class="pill no">deactivated</span>'}${u.locked ? ' · <span class="pill warn">locked</span>' : ''}</div></td>
+      <td data-pages>${boxes(u.pages || [])}</td><td class="muted">${u.last_login ? ago(u.last_login) : 'never'}</td>
+      <td><button class="btn small" data-save>Save</button> <button class="btn small" data-reset>Reset link</button> <button class="btn small ${u.active ? 'danger' : ''}" data-act>${u.active ? 'Deactivate' : 'Activate'}</button></td></tr>`;
+  const lim = w.workspace.limits || {};
+  $('#main').innerHTML = `<h2>Editors: ${esc(w.workspace.name)}</h2><div class="grid">
+    <form class="panel grid" id="winv"><h3>Invite an editor</h3><div class="muted">Editors approve or reject posts and use the Studio for the pages you give them. They get a one-time link to set their password.</div>
+      <div class="row"><input type="email" name="email" placeholder="Email" required><input type="text" name="name" placeholder="Name"></div>
+      <div class="row">${boxes([])}</div><div class="row"><button class="btn primary">Invite</button></div><div id="winvout"></div></form>
+    <div class="panel">${editors.length ? `<div class="adminscroll"><table id="editors"><tr><th>Editor</th><th>Pages</th><th>Last sign-in</th><th></th></tr>${editors.map(rowHtml).join('')}</table></div>`
+      : '<div class="muted" id="noeditors">No editors yet.</div>'}</div>
+    <div class="panel muted">Budgets set by the product owner: each page makes at most ${lim.posts_per_day ?? 10} posts and ${lim.premium_per_day ?? 6} premium cards a day.</div>
+    <div class="panel"><h3>Recent activity</h3>${au.entries.length ? `<div class="adminscroll"><table><tr><th>When</th><th>Who</th><th>What</th></tr>${au.entries.slice(0, 50).map(e =>
+      `<tr><td class="muted">${when(e.at)}</td><td>${esc(e.actor)}</td><td>${esc(String(e.action).replace(/_/g, ' '))}${e.page ? ` · ${esc(e.page)}` : ''}</td></tr>`).join('')}</table></div>` : '<div class="muted">Nothing in the last 7 days.</div>'}</div></div>`;
+  $('#winv').onsubmit = e => { e.preventDefault(); const f = e.target;
+    oneAtATime(f.querySelector('button.primary'), async () => {
+      try { const r = await api('/api/workspace/editors', { method: 'POST', body: { email: f.email.value, name: f.name.value,
+              pages: [...f.querySelectorAll('input[type=checkbox]:checked')].map(c => c.value) } });
+            // the link stays until they leave this screen: it cannot be shown again
+            $('#winvout').innerHTML = `<div class="muted">${r.emailed ? 'Invitation emailed. ' : ''}Send this one-time link to ${esc(r.user.email)} (valid 48 hours):</div><div class="linkbox">${esc(r.setup_link)}</div>`;
+            const nu = { ...r.user, last_login: null, locked: false };
+            editors.push(nu); f.email.value = ''; f.name.value = ''; f.querySelectorAll('input[type=checkbox]').forEach(c => { c.checked = false; });
+            if (!$('#editors')) $('#noeditors').outerHTML = '<div class="adminscroll"><table id="editors"><tr><th>Editor</th><th>Pages</th><th>Last sign-in</th><th></th></tr></table></div>';
+            const t = document.createElement('tbody'); t.innerHTML = rowHtml(nu); const row = t.firstElementChild; $('#editors tbody').appendChild(row); wire(row); }
+      catch (err) { toast(err.message); }
+    }); };
+  function wire(tr) {
+    const id = tr.dataset.u, me = () => editors.find(x => x.id === id);
+    const redraw = u => { const t = document.createElement('tbody'); t.innerHTML = rowHtml(u); const row = t.firstElementChild; tr.replaceWith(row); tr = row; wire(row); };
+    tr.querySelector('[data-save]').onclick = e => oneAtATime(e.target, async () => {
+      const u = me(), changed = [...tr.querySelectorAll('[data-pages] input[data-dirty]')].filter(c => c.checked !== (u.pages || []).includes(c.value));
+      if (!changed.length) return toast('Nothing to save: nothing was changed in this row');
+      const body = { pages_add: changed.filter(c => c.checked).map(c => c.value), pages_remove: changed.filter(c => !c.checked).map(c => c.value) };
+      try { const r = await api(`/api/workspace/editors/${id}`, { method: 'PATCH', body }); Object.assign(u, r.user); redraw(u); toast('Saved'); }
+      catch (err) { toast(err.message); }
+    });
+    tr.querySelector('[data-reset]').onclick = e => oneAtATime(e.target, async () => {
+      try { const r = await api(`/api/workspace/editors/${id}/reset`, { method: 'POST', body: {} });
+            prompt(r.emailed ? 'Emailed. The one-time link (48 hours):' : 'Send this one-time link (48 hours):', r.setup_link); } catch (err) { toast(err.message); }
+    });
+    tr.querySelector('[data-act]').onclick = e => oneAtATime(e.target, async () => {
+      const u = me();
+      if (u.active && !confirm(`Deactivate ${u.email}? They are signed out at once.`)) return;
+      try { const r = await api(`/api/workspace/editors/${id}`, { method: 'PATCH', body: { active: !u.active } }); Object.assign(u, r.user); redraw(u); }
+      catch (err) { toast(err.message); }
+    });
+  }
+  document.querySelectorAll('#editors tr[data-u]').forEach(wire);
+}
+
+// ------------------------------------------------------------------ testers (the product owner)
+// A tester is a workspace and its owner: invited with a set-password link, given budgets (the most each
+// of its pages may use), and paused all at once when needed.
+async function adminTesters() {
+  const nav = S.nav;
+  const [{ workspaces }, { pages }] = await Promise.all([api('/api/admin/workspaces'), api('/api/admin/pages')]);
+  if (nav !== S.nav) return;
+  const byWs = id => pages.filter(p => p.workspace === id && !p.archived);
+  const rowHtml = w => { const lim = w.limits || {}, live = byWs(w.id).filter(p => p.status === 'live');
+    return `<tr data-w="${esc(w.id)}"><td class="wrap"><b>${esc(w.name)}</b><div class="muted">${esc(w.owner || '—')} · ${w.users} ${w.users === 1 ? 'person' : 'people'}</div></td>
+      <td class="wrap">${byWs(w.id).map(p => `<div><a href="#/admin/page/${esc(p.slug)}">${esc(p.name)}</a> ${statusPill(p.status)}</div>`).join('') || '<span class="muted">no pages yet</span>'}</td>
+      <td><input type="number" name="posts_per_day" min="1" max="40" value="${lim.posts_per_day ?? 10}" style="width:76px"></td>
+      <td><input type="number" name="premium_per_day" min="0" max="40" value="${lim.premium_per_day ?? 6}" style="width:76px"></td>
+      <td><button class="btn small" data-save>Save</button> ${live.length ? `<button class="btn small danger" data-pauseall>Pause ${live.length === 1 ? 'its page' : `all ${live.length} pages`}</button>` : ''}</td></tr>`; };
+  $('#main').innerHTML = adminTabs('testers') + `<div class="grid">
+    <form class="panel grid" id="tinv"><h3>Invite a tester</h3><div class="muted">A tester gets a workspace of their own and a one-time link to set their password. They connect their pages and invite their editors there.</div>
+      <div class="row"><input type="email" name="email" placeholder="Email" required><input type="text" name="name" placeholder="Name"><input type="text" name="workspace_name" placeholder="Workspace name" required></div>
+      <div class="row"><label class="muted">Posts a day per page <input type="number" name="posts_per_day" min="1" max="40" value="10" style="width:76px"></label>
+        <label class="muted">Premium cards a day per page <input type="number" name="premium_per_day" min="0" max="40" value="6" style="width:76px"></label></div>
+      <div class="row"><button class="btn primary">Invite tester</button></div><div id="tinvout"></div></form>
+    <div class="panel"><div class="adminscroll"><table id="testers"><tr><th>Workspace</th><th>Pages</th><th>Posts a day</th><th>Premium a day</th><th></th></tr>${workspaces.map(rowHtml).join('')}</table></div></div></div>`;
+  $('#tinv').onsubmit = e => { e.preventDefault(); const f = e.target;
+    oneAtATime(f.querySelector('button.primary'), async () => {
+      try { const r = await api('/api/admin/testers', { method: 'POST', body: { email: f.email.value, name: f.name.value, workspace_name: f.workspace_name.value,
+              posts_per_day: Number(f.posts_per_day.value), premium_per_day: Number(f.premium_per_day.value) } });
+            $('#tinvout').innerHTML = `<div class="muted">${r.emailed ? 'Invitation emailed. ' : ''}Send this one-time link to ${esc(r.user.email)} (valid 48 hours):</div><div class="linkbox">${esc(r.setup_link)}</div>`;
+            const nw = { ...r.workspace, users: 1 }; workspaces.push(nw);
+            const t = document.createElement('tbody'); t.innerHTML = rowHtml(nw); const row = t.firstElementChild; $('#testers tbody').appendChild(row); wire(row);
+            f.email.value = ''; f.name.value = ''; f.workspace_name.value = ''; }
+      catch (err) { toast(err.message); }
+    }); };
+  function wire(tr) {
+    const id = tr.dataset.w, w = () => workspaces.find(x => x.id === id);
+    tr.querySelector('[data-save]').onclick = e => oneAtATime(e.target, async () => {
+      const limits = {};
+      for (const k of ['posts_per_day', 'premium_per_day']) { const i = tr.querySelector(`[name=${k}]`); if (i.dataset.dirty && Number(i.value) !== Number((w().limits || {})[k] ?? NaN)) limits[k] = Number(i.value); }
+      if (!Object.keys(limits).length) return toast('Nothing to save: nothing was changed in this row');
+      try { const r = await api(`/api/admin/workspaces/${encodeURIComponent(id)}`, { method: 'PATCH', body: { limits } });
+            w().limits = r.workspace.limits; tr.querySelectorAll('input').forEach(i => { delete i.dataset.dirty; i.value = r.workspace.limits[i.name] ?? i.value; }); toast('Saved'); }
+      catch (err) { toast(err.message); }
+    });
+    const pa = tr.querySelector('[data-pauseall]');
+    if (pa) pa.onclick = () => oneAtATime(pa, async () => {
+      const live = byWs(id).filter(p => p.status === 'live');
+      if (!confirm(`Pause ${live.map(p => p.name).join(', ')}? No hourly posts are made and nothing is published until you resume ${live.length === 1 ? 'it' : 'them'}; the tester cannot resume what you paused.`)) return;
+      const failed = [];
+      for (const p of live) await api(pageUrl(p.slug, '/pause'), { method: 'POST', body: {} }).catch(e => failed.push(`${p.name}: ${e.message}`));
+      toast(failed.length ? `Not paused: ${failed.join('; ')}` : 'Paused');
+      if (nav === S.nav) adminTesters();
+    });
+  }
+  document.querySelectorAll('#testers tr[data-w]').forEach(wire);
+}
+
+// The product's own settings: what owners read on the "Connect in SocialPilot" step
+async function adminSettings() {
+  const nav = S.nav;
+  const { settings } = await api('/api/admin/settings');
+  if (nav !== S.nav) return;
+  $('#main').innerHTML = adminTabs('settings') + `<form class="panel grid" id="pset"><h3>SocialPilot connection</h3>
+    <div class="muted">Owners read this on each page's "Connect in SocialPilot" step: how to reach the product's SocialPilot (the connection link) and add their Facebook page there. Links become clickable.</div>
+    <textarea name="socialpilot_connect" rows="6" maxlength="3000" placeholder="Open the connection link (https://...) and sign in with the account we sent you, then choose Add account > Facebook page.">${esc(settings.socialpilot_connect)}</textarea>
+    ${settings.changed_at ? `<div class="muted">Last changed ${esc(when(settings.changed_at))} by ${esc(settings.changed_by)}</div>` : ''}
+    <div class="row"><button class="btn primary">Save</button></div></form>`;
+  $('#pset').onsubmit = e => { e.preventDefault(); const f = e.target;
+    oneAtATime(f.querySelector('button.primary'), async () => {
+      try { const r = await api('/api/admin/settings', { method: 'PATCH', body: { socialpilot_connect: f.socialpilot_connect.value } });
+            f.socialpilot_connect.value = r.settings.socialpilot_connect; delete f.socialpilot_connect.dataset.dirty; toast('Saved'); }
+      catch (err) { toast(err.message); }
+    }); };
+}
+
 // ------------------------------------------------------------------ router
 // The dashboard deployed since this tab opened (deploy.sh writes version.json): the tab's code is
 // out of date, and a step it does not know about would fail without saying why. Checked on each
@@ -1744,10 +2245,9 @@ async function route() {
   if (!S.retrying) S.routeFails = 0;                 // (counted while it tries again by itself)
   S.retrying = false;
   checkVersion();
-  const h = location.hash.replace(/^#/, '') || '/studio';
+  let h = location.hash.replace(/^#/, '');
   const reset = location.hash.match(/^#\/?reset=(.+)$/);
   if (reset) { header(); return setPasswordView(decodeURIComponent(reset[1])); }
-  if (h.startsWith('/forgot')) { header(); return forgotView(); }
   if (!S.me) {
     try { await loadMe(); } catch (e) {
       header();
@@ -1774,9 +2274,13 @@ async function route() {
     if (msg && nav === S.nav) toast(msg);
   }
   if (nav !== S.nav) return;
+  // open access (lib/session.js): nobody signs in, so no sign-in, password or reset screen is shown
+  const open = !!(S.me && S.me.open_access);
+  if (h.startsWith('/forgot') && !open) { header(); return forgotView(); }
   if (!S.me) { header(); return loginView(h.startsWith('/login') ? decodeURIComponent((h.match(/next=([^&]+)/) || [])[1] || '') : h, (h.match(/[?&]why=(\w+)/) || [])[1]); }
-  if (S.me.user.must_change || h === '/password') { header(); return setPasswordView(null); }
-  if (h.startsWith('/login')) return go('/studio');
+  if (!open && (S.me.user.must_change || h === '/password')) { header(); return setPasswordView(null); }
+  // the start screen (an owner with no page yet: Pages, to connect the first one)
+  if (!h || h === '/' || h.startsWith('/login') || h.startsWith('/forgot') || h === '/password') { h = home(); history.replaceState(null, '', '#' + h); }
   header();
   loadHealth();
   const parts = h.split('/').filter(Boolean);
@@ -1789,10 +2293,15 @@ async function route() {
     }
     if (parts[0] === 'studio' && parts[1] === 'topics') return await topicsView();
     if (parts[0] === 'templates') return await templatesView(false);
+    if (parts[0] === 'pages' || parts[0] === 'workspace') {
+      await (parts[0] === 'workspace' ? workspaceView() : parts[1] ? pageView(parts[1], parts[2]) : pagesView());
+      if (nav === S.nav) restoreDrafts();                            // (signed out while typing here)
+      return;
+    }
     if (parts[0] === 'admin' && S.me.user.role === 'super') {
       if (parts[1] === 'page') await adminPage(parts[2]);
       else if (parts[1] === 'templates') await templatesView(true);
-      else await ({ users: adminUsers, pages: adminPages, health: adminHealth, audit: adminAudit, usage: adminUsage }[parts[1]] || adminUsers)();
+      else await ({ testers: adminTesters, users: adminUsers, pages: adminPages, health: adminHealth, audit: adminAudit, usage: adminUsage, settings: adminSettings }[parts[1]] || adminTesters)();
       if (nav === S.nav) restoreDrafts();                            // (signed out while typing here)
       return;
     }

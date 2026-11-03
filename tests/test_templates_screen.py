@@ -149,6 +149,17 @@ def test_an_editor_approves_a_converted_template_and_rejects_it_with_a_note(brow
     admin.context.close()
 
 
+def made_up_picture():
+    """A made-up template picture (a coloured card with a box), as JPEG base64: no page's own image."""
+    import io
+    from PIL import Image, ImageDraw
+    im = Image.new("RGB", (400, 500), (15, 61, 46))
+    ImageDraw.Draw(im).rectangle((40, 300, 360, 460), fill=(240, 240, 230))
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", quality=85)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
 THUMB = "() => { const i = document.querySelector('%s .tplthumb'); return !!i && i.complete && i.naturalWidth > 0; }"
 
 
@@ -168,8 +179,7 @@ def test_the_ideas_and_visual_steps_show_the_chosen_templates_preview_without_fe
         const r = await fetch(path, { method, body: body === null ? undefined : JSON.stringify(body),
           headers: { 'content-type': 'application/json', ...(auth ? { authorization: 'Bearer ' + auth } : {}) } });
         return { status: r.status, body: await r.json().catch(() => null) }; }""", [method, path, body, ROUTINE if routine else None])
-    from test_tspec import _busy_photo
-    pic = base64.b64encode(_busy_photo(600, 750)).decode()
+    pic = made_up_picture()
     r = call("POST", "/api/routine/templates", {"page": SLUG, "job": "", "doc_version": 1, "doc_pages": [1],
                                                "spec": {**SPEC, "id": "t9", "name": "Made-up Thumb"}, "preview_b64": pic,
                                                "pages": [{"n": 1, "image_b64": pic}]}, True)

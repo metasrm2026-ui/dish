@@ -1,5 +1,5 @@
 // /api/admin/*  (the product owner only: role super) testers and their workspaces, users, pages, sources,
-// reference documents, audit and usage logs. A page's owner manages it in routes/pages.js, with the
+// reference documents, the product's settings, audit and usage logs. A page's owner manages it in routes/pages.js, with the
 // same sections (pageSection).
 // Section 5: everything that varies by brand is configured here, with no code change.
 // Section 6: sources and reference documents are stored encrypted; documents are never
@@ -376,6 +376,9 @@ async function freeWorkspaceId(name) {
   }
   return `${base.slice(0, 40)}-${randomId(4).toLowerCase()}`;
 }
+const CONNECT_MAX = 3000;
+export const settingsPublic = rec => ({ socialpilot_connect: (rec && rec.socialpilot_connect) || '', changed_at: (rec && rec.changed_at) || null,
+                                        changed_by: (rec && rec.changed_by) || '' });
 const workspacePublic = (w, users = [], pages = []) => ({ id: w.id, name: w.name, owner: w.owner_email || '', limits: w.limits || {},
   created_at: w.created_at || null, pages: pages.filter(p => p.workspace === w.id).map(p => p.slug),
   users: users.filter(x => x.workspace === w.id).length });
@@ -511,6 +514,20 @@ export default async function handler(req, res) {
       return r.error ? bad(res, r.error, r.status) : ok(res, r);
     }
     return pageSection(req, res, u, p, sub, subId, req.subpath[4]);
+  }
+
+  // ---------------------------------------------------------------- the product's own settings
+  // settings/product {socialpilot_connect}: the text owners read on a page's "Connect in SocialPilot"
+  // step (how to reach the product's SocialPilot and add their page there), written by the super
+  if (what === 'settings' && !id) {
+    if (req.method === 'GET') return ok(res, { settings: settingsPublic(await getRecord('settings', 'product')) });
+    if (req.method === 'PATCH') {
+      if (b.socialpilot_connect === undefined) return bad(res, 'send socialpilot_connect');
+      const text = String(b.socialpilot_connect ?? '').replace(/\r\n?/g, '\n').slice(0, CONNECT_MAX).trim();
+      const next = await updateRecord('settings', 'product', cur => ({ ...(cur || {}), socialpilot_connect: text, changed_at: Date.now(), changed_by: u.email }));
+      await audit(u, 'settings_changed', { fields: ['socialpilot_connect'] });
+      return ok(res, { settings: settingsPublic(next) });
+    }
   }
 
   // ---------------------------------------------------------------- logs

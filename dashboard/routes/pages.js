@@ -2,7 +2,8 @@
 //   GET    pages                         the pages the user may see (editors: theirs, read only)
 //   POST   pages                         {name, fb_page_url?, niche?, language?, timezone?} a new page in the
 //                                        owner's workspace (the super: {workspace}), in `draft`
-//   GET    pages/<slug>                  the page, its documents, budgets and onboarding
+//   GET    pages/<slug>                  the page, its documents, budgets and onboarding, and connect_help (the
+//                                        product owner's SocialPilot instructions, Admin > Settings)
 //   PATCH  pages/<slug>                  settings: {name, fb_page_url, niche, language, timezone, posts_per_day,
 //                                        premium_per_day, playbook, socialpilot_connected (the tick)}
 //   *      pages/<slug>/docs|sources|lessons|sheet/...   as Admin > Pages (routes/admin.js pageSection)
@@ -20,7 +21,7 @@ import { randomId } from '../lib/crypto.js';
 import { ok, bad, clean } from '../lib/http.js';
 import { isSuper, isOwner, mayUse, mayManage } from '../lib/tenancy.js';
 import { pagePublic, statusOf, activeVersion, onboardingPublic, ONBOARD_STEPS, DOC_TYPES, budgetsOf } from '../lib/pages.js';
-import { pageSection, createPage, changePage, MAX_UPLOAD_BYTES } from './admin.js';
+import { pageSection, createPage, changePage, MAX_UPLOAD_BYTES, settingsPublic } from './admin.js';
 
 // What Go live needs (docs/PRODUCT.md "Go live"), in the words the owner reads: [field, what to do]
 export function goLiveMissing(p) {
@@ -127,8 +128,10 @@ export default async function handler(req, res) {
   if (!sub && req.method === 'GET') {
     const ws = p.workspace && await getRecord('workspaces', p.workspace);
     if (!mayManage(u, p)) return ok(res, { page: { slug: p.slug, name: p.name, status: statusOf(p), theme: p.theme || {} } });
+    // connect_help: the product owner's own words on how to add the page in SocialPilot (Admin > Settings)
     return ok(res, { page: { ...pagePublic(p, ws), playbook: p.playbook || null }, missing: goLiveMissing(p).map(m => m[0]),
-                     doc_types: DOC_TYPES, doc_max_bytes: MAX_UPLOAD_BYTES });
+                     doc_types: DOC_TYPES, doc_max_bytes: MAX_UPLOAD_BYTES,
+                     connect_help: settingsPublic(await getRecord('settings', 'product')).socialpilot_connect });
   }
   if (!sub && req.method === 'PATCH') {
     const r = await changePage(u, p, b);

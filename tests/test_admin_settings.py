@@ -1,16 +1,21 @@
-"""The admin page shows settings as the code uses them: a value typed into the page by hand must
-change when the routine's own setting does (an admin screen that said 8 posts a day while the
-routine made 20 is how this was found)."""
+"""The screens show settings as the code uses them: a value typed into a page by hand must change when
+the code's own setting does (an admin screen that said 8 posts a day while the routine made 20 is how
+this was found). Posts a day are each page's budget now (docs/PRODUCT.md "Budgets"): the screens show
+the page's own number from the server, and the approvals page's fallback is the dashboard's default."""
 import re
 from pathlib import Path
 
-import yaml
-
 ROOT = Path(__file__).resolve().parent.parent
+PUBLIC = ROOT / "dashboard" / "public"
 
 
-def test_posts_per_day_on_the_admin_page_is_the_routines_cap():
-    cap = yaml.safe_load((ROOT / "config" / "config.yaml").read_text())["posting"]["daily_cap"]
-    shown = re.search(r"^const DAILY_POSTS = (\d+);", (ROOT / "dashboard" / "public" / "app.js").read_text(), re.M)
-    assert shown, "app.js no longer has DAILY_POSTS: update this test to what the admin page shows"
-    assert int(shown.group(1)) == cap, "change DAILY_POSTS in dashboard/public/app.js to config.yaml posting.daily_cap"
+def test_posts_per_day_on_the_screens_is_the_pages_budget():
+    default = re.search(r"BUDGET_DEFAULTS = \{ posts_per_day: (\d+),", (ROOT / "dashboard" / "lib" / "pages.js").read_text())
+    assert default, "lib/pages.js no longer has BUDGET_DEFAULTS: update this test to where the default is"
+    cap = re.search(r"^const CAP = (\d+);", (PUBLIC / "review.html").read_text(), re.M)
+    assert cap, "review.html no longer has CAP: update this test to what the approvals page counts against"
+    assert int(cap.group(1)) == int(default.group(1)), "change CAP in review.html to lib/pages.js BUDGET_DEFAULTS.posts_per_day"
+    assert "posts_per_day || CAP" in (PUBLIC / "review.html").read_text(), "the page's own budget comes first"
+    app = (PUBLIC / "app.js").read_text()
+    assert not re.search(r"^const DAILY_POSTS = ", app, re.M), "the admin page shows the page's budget, not a number of its own"
+    assert 'name="posts_per_day"' in app
