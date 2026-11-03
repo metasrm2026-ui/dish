@@ -3,8 +3,6 @@
   sync          pull pages, sources, playbooks and reference-document text from the dashboard's
                 encrypted store into private/ (gitignored), and the templates and visual documents'
                 pages as images (drawn again when the version changes). Every routine run starts with it.
-  export_pages  one-time migration: push the local page config (sources, pipeline settings,
-                playbook) into the store, after which the repository keeps dummy data only.
   feed          hourly: each page's ranked, de-duplicated stories of the last 24 hours, with
                 candidate photos. The routine writes headline, summary and two visual ideas for
                 the top ones; `publish_feed` sends them, so topic selection and ideation in the
@@ -102,13 +100,20 @@ def classify(src: dict) -> tuple[str, str]:
     return "site", f"{host}/{'/'.join(path)}" if path else host      # keep the section path
 
 
+# What the page record itself says, never the pipeline settings: its status, budgets and account
+RECORD_FIELDS = ("workspace", "status", "posts_per_day", "premium_per_day", "socialpilot_login_id")
+
+
 def page_from_config(p: dict) -> Page:
     """The collector's page settings: the stored pipeline settings, with the source lists taken
-    from the admin's active sources (an admin who disables a source removes it everywhere)."""
-    pl = dict(p.get("pipeline") or {})
+    from the admin's active sources (an admin who disables a source removes it everywhere). The
+    page record's status, budgets and SocialPilot account come from the record alone: a record
+    without a status is a draft (it never runs)."""
+    pl = {k: v for k, v in (p.get("pipeline") or {}).items() if k not in RECORD_FIELDS}
     pl.update(slug=p["slug"], name=p.get("name") or pl.get("name") or p["slug"],
               timezone=p.get("timezone") or pl.get("timezone") or "America/New_York",
-              hourly=bool(pl.get("hourly", False)))
+              hourly=bool(pl.get("hourly", True)),
+              **{k: p[k] for k in RECORD_FIELDS if p.get(k) is not None})
     base = Page.from_dict(pl)
     xs, subs, searches, sites, feeds = [], [], [], [], []
     for s in p.get("sources") or []:
@@ -290,8 +295,9 @@ def sync(dash=None, quiet: bool = False) -> list[dict]:
                 shutil.rmtree(PRIVATE / "docs" / page.slug / t, ignore_errors=True)
         templates = _sync_templates(page.slug, p)
         meta[page.slug] = {"name": page.name, "theme": p.get("theme") or {}, "docs": docs, "templates": templates,
-                           "hourly": page.hourly,
-                           "posts_per_day": p.get("posts_per_day"), "socialpilot_login_id": p.get("socialpilot_login_id"),
+                           "hourly": page.hourly, "status": page.status, "workspace": page.workspace,
+                           "posts_per_day": page.posts_per_day, "premium_per_day": page.premium_per_day,
+                           "socialpilot_login_id": page.socialpilot_login_id,
                            "fb_page_id": p.get("fb_page_id"), "has_playbook": isinstance(pb, dict) and bool(pb)}
     save_pages(pages, PRIVATE / "pages.yaml")
     (PRIVATE / "studio.json").write_text(json.dumps(meta, indent=1, ensure_ascii=False))
@@ -304,7 +310,7 @@ def sync(dash=None, quiet: bool = False) -> list[dict]:
     if not quiet:
         for slug, m in meta.items():
             pg = next(x for x in pages if x.slug == slug)
-            print(f"{m['name']} ({slug}): {'hourly + Studio' if m['hourly'] else 'Studio only'}, "
+            print(f"{m['name']} ({slug}): {m['status']}, {'hourly + Studio' if m['hourly'] else 'Studio only'}, "
                   f"{len(pg.x_handles) + len(pg.x_handles_secondary)} X, {len(pg.subreddits) + len(pg.subreddits_rotation)} "
                   f"Reddit, {len(pg.web_searches) + len(pg.web_rotation)} web searches, docs: "
                   + (", ".join(f"{t} ({len(v['images'])} page images)" if v.get("images") else t
@@ -364,36 +370,6 @@ def approved_templates(slug: str) -> list[dict]:
 def studio_meta() -> dict:
     f = PRIVATE / "studio.json"
     return json.loads(f.read_text()) if f.exists() else {}
-
-
-def export_pages(dash=None, pages_file: Path | None = None) -> list[str]:
-    """Push the local page config into the encrypted store (run once, from a machine that still
-    has the old config/pages.yaml and playbooks)."""
-    from .config import priority_terms
-    from .routine import load_playbook
-    dash = dash or _dash()
-    out = []
-    for page in load_pages(pages_file):
-        pipeline = {k: v for k, v in page.to_dict().items() if k not in ("slug", "name", "priority_terms_file")}
-        pipeline["hourly"] = True
-        pipeline["priority_terms"] = priority_terms(page)
-        if page.priority_terms_file:           # the page's source sheet (categories, terms, notes)
-            f = Path(page.priority_terms_file)
-            f = f if f.is_absolute() else ROOT / f
-            pipeline["source_sheet"] = yaml.safe_load(f.read_text()) if f.exists() else None
-        out.append({"slug": page.slug, "name": page.name, "timezone": page.timezone, "sources": sources_from_page(page),
-                    "pipeline": pipeline, "playbook": load_playbook(page.slug) or None,
-                    "socialpilot_login_id": _sp_login(page.slug)})
-    return _post(dash, "pages", {"pages": out})["pages"]
-
-
-def _sp_login(slug: str) -> str:
-    f = ROOT / "config" / "socialpilot.yaml"
-    if not f.exists():
-        return ""
-    sp = yaml.safe_load(f.read_text()) or {}
-    acc = (sp.get("accounts") or {}).get(slug) or {}
-    return str(acc.get("login_id") or acc.get("loginId") or "")
 
 
 # ------------------------------------------------------------------ hourly feed
@@ -565,10 +541,9 @@ def merge_same_stories(page, ranked: list) -> list:
     chain together): after ranking, the lower-ranked copy's posts join the higher-ranked one. The
     same story as any story already merged into it: a shared post or linked article, the repeat
     test of the upload gate (bore/dupes.py), or the same subject and at least two shared words about
-    what happened. The live Huddle feed of Oct 21 had Sam Franklin Jr.'s suspension, Jordan
-    Elliott's release and Brandon McManus's signing twice each, and the dispute over Jalen Hurts'
-    medical care three times ('NFL finds Eagles handled...' is the story of 'NFL backs Eagles'
-    handling...', which had joined the NFLPA's call)."""
+    what happened. A live sports feed had one player's suspension, another's release and a signing
+    twice each, and one dispute three times ('League finds Demo FC handled...' is the story of
+    'League backs Demo FC's handling...')."""
     from .dupes import Deduper, trend_text
     from .media import list_post, subject_of
     dd, kept = Deduper(page, []), []
@@ -713,8 +688,8 @@ def _feed_images(t, policy: str, images: list[dict], same: list | None = None, s
         good = [ph for ph in good if shows(ph)]
     # fewer than two photos that may show the subject: search for them by name, if the subject is
     # a person whose face is known (a phrase like 'On March' or 'Former Cornell' never is), never on
-    # a crime or court story, and keep only the photos showing that face (Oct 21: 37 search photos
-    # on Culture Rush, none of them face-matched, under labels that read as checked)
+    # a crime or court story, and keep only the photos showing that face (one day's 37 search photos
+    # on a celebrity page, none of them face-matched, under labels that read as checked)
     if (sum(shows(ph) and ph.id_match != "mismatch" for ph in good) < 2 and subject and searches
             and searches.get("left", 0) > 0 and not crime_story(t, members) and _known_face(ref)):
         searches["left"] -= 1                       # photos of the subject by name (checked by the search)
@@ -776,7 +751,7 @@ def _feed_faces(t, policy: str, images: list[dict]) -> list[dict]:
 
 
 def prepare_feed(run: Path, cfg: dict, store, dash=None, now: float | None = None) -> list[Path]:
-    """Write work/<run>/feed/<page>.json for every page. A story already in the current feed (the
+    """Write work/<run>/feed/<page>.json for every live page. A story already in the current feed (the
     same posts: _inherit) keeps its written text or the writer's 'not news' verdict; the top
     FEED_WRITE others are marked needs_writing."""
     from .select import select_page
@@ -787,7 +762,7 @@ def prepare_feed(run: Path, cfg: dict, store, dash=None, now: float | None = Non
     c2["clustering"]["window_hours"] = 24
     out = []
     for page in load_pages():
-        if page.slug not in meta:
+        if page.slug not in meta or not page.live:      # a page that is not live has no story feed
             continue
         res = select_page(page, store.page_items(page.slug, now - 24 * 3600), c2, [], now, quota=0)
         ranked = merge_same_stories(page, sorted(res.trends + res.watchlist, key=lambda t: -t.score))
@@ -1624,6 +1599,6 @@ def finish_job(jd: Path, dash=None, fail_reason: str = "") -> dict:
     return r
 
 
-__all__ = ["sync", "export_pages", "prepare_feed", "publish_feed", "pull_jobs", "finish_job", "precheck", "image_search",
+__all__ = ["sync", "prepare_feed", "publish_feed", "pull_jobs", "finish_job", "precheck", "image_search",
            "page_from_config", "sources_from_page", "classify", "check_ideas", "post_result", "LAYOUT_DOC",
            "approved_templates", "send_template", "write_templates_job", "is_template_dir"]

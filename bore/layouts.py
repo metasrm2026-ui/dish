@@ -1,5 +1,5 @@
-"""Generic card layouts for any page (Studio): the common shapes a page's templates document
-describes, coloured from the page's theme (admin panel: accent, background, text, logo text).
+"""Generic card layouts for any page: the common shapes a page's templates document describes,
+coloured from the page's theme (admin panel: accent, background, text, logo text, fonts).
 
   headline      big photo on top, headline band below
   quote         photo on top, the quote in large type, the speaker under it
@@ -19,8 +19,11 @@ import re
 
 GENERIC = ("headline", "quote", "stat_card", "comparison", "then_vs_now", "ranked_list", "timeline")
 W, H = 1080, 1350
-DEFAULT_THEME = {"accent": "#ffd21f", "bg": "#111111", "ink": "#ffffff", "logo_text": ""}
+DEFAULT_THEME = {"accent": "#ffd21f", "bg": "#111111", "ink": "#ffffff", "logo_text": "", "font": "Anton",
+                 "logo_font": "Oswald"}
 HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+# the fonts the cards can draw (assets/fonts, cards.BASE_CSS): a theme names one of these
+FONTS = ("Anton", "Oswald", "Marker", "Inter")
 
 # photo boxes (x, y, w, h) per layout; [0] is the main photo
 BOXES = {
@@ -41,12 +44,21 @@ def theme_of(theme: dict | None) -> dict:
             t[k] = v
         elif k == "logo_text" and isinstance(v, str):
             t[k] = v.strip()[:40]
+        elif k in ("font", "logo_font") and isinstance(v, str):
+            name = next((f for f in FONTS if f.lower() == v.strip().lower()), None)
+            if name:          # an unknown font keeps the default (a page's card never falls back to a system font)
+                t[k] = name
     return t
 
 
-def _contrast_ink(hex_color: str) -> str:
+def luminance(hex_color: str) -> float:
     r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
-    return "#111111" if 0.299 * r + 0.587 * g + 0.114 * b > 150 else "#ffffff"
+    return 0.299 * r + 0.587 * g + 0.114 * b
+
+
+def contrast_ink(hex_color: str) -> str:
+    """Near-black on a light colour, white on a dark one."""
+    return "#111111" if luminance(hex_color) > 150 else "#ffffff"
 
 
 MIN_FACE = 190          # face height on the card we aim for (verify needs 100px); zoom in up to this
@@ -82,7 +94,7 @@ def build(spec, theme: dict | None = None) -> str:
     from .cards import BASE_CSS, FIT_JS, _data_uri, _esc, _hl, _img_mime
     t = theme_of(theme)
     acc, bg, ink = t["accent"], t["bg"], t["ink"]
-    acc_ink = _contrast_ink(acc)
+    acc_ink, font = contrast_ink(acc), t["font"]
     tpl = spec.template if spec.template in GENERIC else "headline"
     boxes = BOXES[tpl]
     photos = list(spec.photos or [])
@@ -163,31 +175,31 @@ def build(spec, theme: dict | None = None) -> str:
 .band {{ position:absolute; left:0; right:0; bottom:0; padding:26px 50px 44px; display:flex; flex-direction:column; justify-content:center; background:{bg}; border-top:8px solid {acc}; }}
 .label {{ align-self:flex-start; display:inline-block; background:{acc}; color:{acc_ink}; font-family:Oswald; font-weight:700; font-size:34px;
   letter-spacing:2px; padding:2px 16px 4px; margin-bottom:10px; }}
-.hl-line span {{ font-family:Anton; color:{ink}; line-height:1.04; }}
+.hl-line span {{ font-family:{font}; color:{ink}; line-height:1.04; }}
 .hi {{ color:{acc}; }}
 .q {{ font-family:Oswald !important; font-weight:700; }}
 .speaker {{ font-family:Oswald; font-weight:600; color:{acc}; font-size:40px; margin-top:10px; }}
 .dek {{ font-family:Inter; font-weight:600; color:{ink}; opacity:.85; font-size:34px; line-height:1.25; margin-top:12px; }}
-.stat span {{ font-family:Anton; color:{acc}; line-height:1; }}
+.stat span {{ font-family:{font}; color:{acc}; line-height:1; }}
 .statl {{ font-family:Oswald; font-weight:700; color:{ink}; font-size:44px; letter-spacing:3px; }}
 .vs {{ position:absolute; left:490px; top:735px; z-index:2; width:100px; height:100px; border-radius:50%; background:{acc}; color:{acc_ink};
-  font-family:Anton; font-size:52px; text-align:center; line-height:100px; box-shadow:0 8px 24px rgba(0,0,0,.6); }}
+  font-family:{font}; font-size:52px; text-align:center; line-height:100px; box-shadow:0 8px 24px rgba(0,0,0,.6); }}
 .nm {{ position:absolute; top:750px; height:70px; background:{acc}; text-align:center; padding-top:6px; }}
-.nm span {{ font-family:Anton; color:{acc_ink}; }}
+.nm span {{ font-family:{font}; color:{acc_ink}; }}
 .crow {{ display:flex; align-items:center; border-bottom:2px solid rgba(255,255,255,.12); padding:10px 0; }}
-.cv {{ flex:1; font-family:Anton; font-size:58px; color:{ink}; text-align:center; }}
+.cv {{ flex:1; font-family:{font}; font-size:58px; color:{ink}; text-align:center; }}
 .cl {{ width:360px; font-family:Oswald; font-weight:700; font-size:30px; color:{acc}; text-align:center; letter-spacing:2px; }}
-.tag {{ position:absolute; background:{acc}; color:{acc_ink}; font-family:Anton; font-size:52px; padding:0 18px 4px; }}
+.tag {{ position:absolute; background:{acc}; color:{acc_ink}; font-family:{font}; font-size:52px; padding:0 18px 4px; }}
 .tag b {{ font-family:Oswald; font-weight:700; font-size:40px; }}
 .rows {{ margin-top:12px; }}
 .row {{ display:flex; align-items:center; gap:22px; padding:12px 0; border-bottom:2px solid rgba(255,255,255,.1); }}
-.rn {{ width:70px; height:70px; flex:none; background:{acc}; color:{acc_ink}; font-family:Anton; font-size:50px; text-align:center; line-height:70px; }}
-.rt span {{ font-family:Anton; color:{ink}; }}
+.rn {{ width:70px; height:70px; flex:none; background:{acc}; color:{acc_ink}; font-family:{font}; font-size:50px; text-align:center; line-height:70px; }}
+.rt span {{ font-family:{font}; color:{ink}; }}
 .rv {{ font-family:Inter; font-weight:600; color:{ink}; opacity:.8; font-size:28px; }}
 .tl .td {{ width:200px; flex:none; font-family:Oswald; font-weight:700; color:{acc}; font-size:40px; }}
 .tl .dot {{ width:22px; height:22px; flex:none; border-radius:50%; background:{acc}; }}
 .tl .rt span {{ font-family:Inter; font-weight:700; }}
-.logo {{ position:absolute; right:30px; bottom:12px; font-family:Oswald; font-weight:700; font-size:26px; letter-spacing:4px; color:{acc}; opacity:.9; }}
+.logo {{ position:absolute; right:30px; bottom:12px; font-family:{t["logo_font"]}; font-weight:700; font-size:26px; letter-spacing:4px; color:{acc}; opacity:.9; }}
 """
     return (f'<!doctype html><html><head><meta charset="utf-8"><style>{css}</style></head><body><div class="card">'
             f"{body}{logo}</div><script>{FIT_JS}</script></body></html>")
@@ -198,4 +210,4 @@ def face_clear(spec) -> list[str]:
     return []
 
 
-__all__ = ["GENERIC", "BOXES", "build", "theme_of", "items_text", "DEFAULT_THEME"]
+__all__ = ["GENERIC", "BOXES", "FONTS", "build", "theme_of", "items_text", "luminance", "contrast_ink", "DEFAULT_THEME"]

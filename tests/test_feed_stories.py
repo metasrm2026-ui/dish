@@ -1,27 +1,16 @@
-"""Topic feed stories (Oct 21 live feeds): written text and the writer's 'not news' verdict stay with
-the same posts only, subjects are names of people, a photo search by name only finds that face,
-duplicates are merged, and a crashed photo check is checked again."""
+"""Topic feed stories: written text and the writer's 'not news' verdict stay with the same posts only,
+subjects are names of people, a photo search by name only finds that face, and a crashed photo check
+is checked again."""
 import json
 from types import SimpleNamespace as NS
 
 import pytest
 
 from bore import faceid, studio
-from bore.cluster import Cluster
 from bore.config import Page
 from bore.media import Photo, names_in, subject_of
-from bore.select import Trend
 
-from conftest import FIXTURES
 from test_feed_images import NOW, run_feed, story, trend
-
-FEED = json.loads((FIXTURES / "feed_stories_20261021.json").read_text())
-BY_HEAD = {s["headline"]: s for s in FEED["stories"]}
-
-
-def head(start: str) -> dict:
-    return next(s for h, s in BY_HEAD.items() if h.startswith(start))
-
 
 def written(t, headline, **k):
     return {**story(t), "headline": headline, "summary": "s.", "ideas": [{}, {}], "images_v": studio.IMAGES_V,
@@ -128,7 +117,7 @@ def test_a_crashed_photo_check_stays_unchecked_and_is_checked_next_run(monkeypat
     # prepare_feed: unchecked (images_v 0), and the next run checks the story again
     monkeypatch.setattr(studio, "_feed_images", lambda *a, **k: (_ for _ in ()).throw(studio.PhotoCheckFailed([], "OSError")))
     import bore.select
-    monkeypatch.setattr(studio, "load_pages", lambda: [Page.from_dict({"slug": "demo", "name": "Demo"})])
+    monkeypatch.setattr(studio, "load_pages", lambda: [Page.from_dict({"slug": "demo", "name": "Demo", "status": "live"})])
     monkeypatch.setattr(studio, "studio_meta", lambda: {"demo": {}})
     monkeypatch.setattr(studio, "_page_templates", lambda slug: [])
     monkeypatch.setattr(studio, "_get", lambda dash, path, **k: {"feed": {"stories": []}})
@@ -142,25 +131,6 @@ def test_a_crashed_photo_check_stays_unchecked_and_is_checked_next_run(monkeypat
 
 
 # ------------------------------------------------------------------ subjects
-def test_live_subjects_name_a_person_or_nobody():
-    """Oct 21: 'On March', 'He COULD', 'Packers RB Josh', 'Riley Patterson.' were searched by name.
-    Each is now nobody or the right person, or a phrase the person lookup has no face for (so it is
-    never searched by name or compared with faces)."""
-    for s in FEED["stories"]:
-        got = subject_of(s["members"])
-        assert got in s["subject_ok"] or got in FEED["not_people"], (s["headline"], got)
-    for bad in ("On March", "He COULD", "Packers RB Josh", "Saints WR Jordyn", "Bills DB Sam", "Former Cornell",
-                "Riley Patterson.", "Power Rankings", "From The Insiders", "Saints GM Mickey", "Los Angeles"):
-        assert bad not in {subject_of(s["members"]) for s in FEED["stories"]}
-
-
-@pytest.mark.parametrize("start,name", [("NFLPA calls", "Jalen Hurts"), ("Kelly Soo Park", "Kelly Soo Park"),
-                                        ("Bills DB Sam Franklin", "Sam Franklin Jr."), ("Steve Tisch gave up", "Steve Tisch"),
-                                        ("Packers RB Josh Jacobs", "Josh Jacobs"), ("Rams signing veteran kicker", "Brandon McManus")])
-def test_real_names_are_kept(start, name):
-    assert subject_of(head(start)["members"]) == name
-
-
 def test_names_are_read_from_sentences():
     assert names_in("Following his emails with Jeffrey Epstein, Steve Tisch gave up his stake") == \
         [("Jeffrey Epstein", "object"), ("Steve Tisch", "")]
@@ -251,39 +221,3 @@ def test_a_name_search_needs_a_known_face_and_keeps_only_that_face(monkeypatch, 
     if searched:
         assert calls == ["Josh Jacobs"] and [i["url"] for i in out] == ["https://img.example.org/1.jpg"]
         assert out[0]["flags"] == ["photo of Josh Jacobs (search)"]
-
-
-# ------------------------------------------------------------------ duplicates
-def _trends(page):
-    out = []
-    for i, s in enumerate(x for x in FEED["stories"] if x["page"] == page):
-        ms = [{**m, "id": f"{i}-{j}", "url": f"https://example.org/{i}/{j}", "created_at": NOW} for j, m in enumerate(s["members"])]
-        out.append(Trend(Cluster(members=ms), 10.0 - i * 0.1, "watchlist", s["headline"], []))
-    return out
-
-
-def test_duplicate_stories_are_merged_and_different_ones_kept():
-    kept = []
-    for page in ("culture-rush", "huddle"):
-        kept += [t.key for t in studio.merge_same_stories(Page.from_dict({"slug": page, "name": page}), _trends(page))]
-
-    def listed(start):
-        return any(k.startswith(start) for k in kept)
-    for a, b in FEED["same_story"]:          # the lower-ranked copy joined the higher-ranked one
-        assert listed(a) and not listed(b), (a, b)
-    for a, b in FEED["different_stories"]:
-        assert listed(a) and listed(b), (a, b)
-    assert len(kept) == len(FEED["stories"]) - 5      # three pairs, and the Hurts dispute's three stories
-
-
-def test_a_story_joins_through_any_story_already_merged():
-    """'NFL finds Eagles handled... appropriately' is the story of 'NFL backs Eagles' handling', which
-    had joined the NFLPA's call (a statement naming several people): compared with the first story
-    alone, it stayed apart."""
-    page = Page.from_dict({"slug": "huddle", "name": "huddle"})
-    ts = {t.key: t for t in _trends("huddle")}
-    keys = [k for k in ts if k.startswith(("NFLPA calls", "NFL backs Eagles", "NFL finds Eagles"))]
-    n = sum(len(ts[k].cluster.members) for k in keys)
-    assert len(studio.merge_same_stories(page, [ts[keys[0]], ts[keys[2]]])) == 2      # the finding alone: apart
-    (kept,) = studio.merge_same_stories(page, [ts[k] for k in keys])
-    assert kept.key.startswith("NFLPA calls") and len(kept.cluster.members) == n

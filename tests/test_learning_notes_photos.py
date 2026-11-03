@@ -10,7 +10,7 @@ DAY = 86400
 NFL = {"niche": "NFL"}
 
 
-def rv(verdict, headline, page="huddle", days_ago=1, **kw):
+def rv(verdict, headline, page="demo-sports", days_ago=1, **kw):
     return {"verdict": verdict, "page": page, "headline": headline, "decided_at": (NOW - days_ago * DAY) * 1000, **kw}
 
 
@@ -21,9 +21,9 @@ def test_notes_are_quoted_newest_first_without_repeats_old_ones_fade():
                rv("rejected", "C SIGNS", reason="Weak story", note="nobody follows this team", days_ago=2),
                rv("rejected", "D SIGNS", reason="Weak story", note="from two months ago", days_ago=60),       # faded
                rv("withdrawn", "E SIGNS", note="SocialPilot was locked"),                                      # not about the post
-               rv("rejected", "F SIGNS", page="culture-rush", reason="Weak story", note="another page's note"),
+               rv("rejected", "F SIGNS", page="demo-celeb", reason="Weak story", note="another page's note"),
                rv("feedback", "G SIGNS", reason="Redo", note="make the photo bigger", days_ago=0.5)]
-    rec = L.build("huddle", reviews, NFL, NOW)
+    rec = L.build("demo-sports", reviews, NFL, NOW)
     notes = rec["notes"]
     assert [n["text"] for n in notes] == ["make the photo bigger", "Practice updates are too minor!",
                                           "nobody follows this team"]
@@ -31,7 +31,7 @@ def test_notes_are_quoted_newest_first_without_repeats_old_ones_fade():
     assert notes[0]["verdict"] == "feedback" and notes[0]["themes"] == ["photo"]
     many = [rv("rejected", f"P{i} SIGNS", reason="Weak story", note=f"note number {i} about {w}", days_ago=i / 10)
             for i, w in enumerate("abcdefghijklmnopqrstuvwxyz")]
-    big = L.build("huddle", many, NFL, NOW)
+    big = L.build("demo-sports", many, NFL, NOW)
     assert len(big["notes"]) == L.NOTE_KEEP and big["notes"][0]["text"].startswith("note number 0")
     assert len(L.for_brief(big, "transaction")["notes"]) == L.NOTE_BRIEF
 
@@ -43,7 +43,7 @@ def test_a_note_follows_its_kind_and_template_into_the_brief():
                   kind_rank="other")]
     older = [rv("rejected", f"N{i} SIGNS", reason="Weak story", note=f"newer note {i} on signings", kind_rank="transaction",
                 days_ago=i / 100) for i in range(L.NOTE_BRIEF)]          # push both out of the newest 8
-    rec = L.build("huddle", reviews + older, NFL, NOW)
+    rec = L.build("demo-sports", reviews + older, NFL, NOW)
     part = L.for_brief(rec, "injury_practice")
     assert part["this_kind"]["notes"] and part["this_kind"]["notes"][0].startswith('"wrong player in the photo" (Image quality')
     assert "'report' card" in part["this_kind"]["notes"][0]
@@ -52,7 +52,7 @@ def test_a_note_follows_its_kind_and_template_into_the_brief():
     assert part["template_notes"]["topic"][0].startswith('"debates need a close photo"')
     assert len(part["notes"]) == L.NOTE_BRIEF
     # while they are among the newest, they are quoted there only, with their kind and template
-    recent = L.for_brief(L.build("huddle", reviews, NFL, NOW), "injury_practice")
+    recent = L.for_brief(L.build("demo-sports", reviews, NFL, NOW), "injury_practice")
     assert len(recent["notes"]) == 2 and recent["this_kind"]["notes"] == [] and recent["template_notes"] == {}
     assert "'report' card" in recent["notes"][0] and "Image quality" in recent["notes"][0]
 
@@ -60,7 +60,7 @@ def test_a_note_follows_its_kind_and_template_into_the_brief():
 def test_a_brief_quotes_each_note_once_within_a_cap():
     many = [rv("rejected", f"P{i} SIGNS", reason="Weak story", note=f"note {i} " + "x" * 280, template=f"t{i % 10}",
                kind_rank="transaction" if i % 2 else "other", days_ago=i / 10) for i in range(30)]
-    rec = L.build("huddle", many, NFL, NOW)
+    rec = L.build("demo-sports", many, NFL, NOW)
     part = L.for_brief(rec, "transaction")
     quoted = part["notes"] + part["this_kind"]["notes"] + [q for qs in part["template_notes"].values() for q in qs]
     assert len(quoted) == len(set(quoted)) <= L.NOTE_BRIEF + L.NOTE_PER + L.NOTE_TPL
@@ -72,7 +72,7 @@ def test_recurring_note_themes_become_rules():
     reviews = [rv("rejected", "A SIGNS", reason="Image quality", note="blurry photo"),
                rv("rejected", "B SIGNS", reason="Image quality", note="wrong player pictured", days_ago=2),
                rv("rejected", "C SIGNS", reason="Caption off-voice", note="too many emojis in the caption")]
-    rec = L.build("huddle", reviews, NFL, NOW)
+    rec = L.build("demo-sports", reviews, NFL, NOW)
     assert [t["id"] for t in rec["note_themes"]] == ["photo"] and rec["note_themes"][0]["count"] == 2
     rule = next(r for r in rec["rules"] if r.startswith("EDITORS' NOTES"))
     assert "about the photo" in rule and '"blurry photo"' in rule
@@ -94,21 +94,21 @@ def test_notes_about_the_photo_or_caption_never_teach_which_stories_to_skip():
     assert L.themes_of("dead wrong headline", "Redo") == ["text", "facts"]
     assert L.themes_of("the victim was 19 and died at home", "Weak story") == []   # true crime names victims anyway
     assert L.themes_of("too soon, insensitive", "Weak story") == ["taste"] and L.themes_of("time-sensitive deal") == []
-    reviews = [rv("rejected", "A KILLED", page="culture-rush", reason="Image quality", note="weak photo"),
-               rv("rejected", "B KILLED", page="culture-rush", reason="Image quality", note="meh pic, too dark", days_ago=2),
-               rv("rejected", "C KILLED", page="culture-rush", reason="Caption off-voice", note="victim's name is misspelled"),
-               rv("rejected", "D KILLED", page="culture-rush", reason="Wrong / unverified facts", note="the victim was 34")]
-    rec = L.build("culture-rush", reviews, {"niche": "celebrities"}, NOW)
+    reviews = [rv("rejected", "A KILLED", page="demo-celeb", reason="Image quality", note="weak photo"),
+               rv("rejected", "B KILLED", page="demo-celeb", reason="Image quality", note="meh pic, too dark", days_ago=2),
+               rv("rejected", "C KILLED", page="demo-celeb", reason="Caption off-voice", note="victim's name is misspelled"),
+               rv("rejected", "D KILLED", page="demo-celeb", reason="Wrong / unverified facts", note="the victim was 34")]
+    rec = L.build("demo-celeb", reviews, {"niche": "celebrities"}, NOW)
     assert [t["id"] for t in rec["note_themes"]] == ["photo"]
     assert not any("minor stories" in r or "sensitive stories" in r for r in rec["rules"])
     assert rec["notes"][0]["themes"] == ["photo"]
 
 
 def test_old_ledger_entries_and_old_records_still_work():
-    bare = [{"verdict": "approved", "page": "huddle", "decided_at": (NOW - DAY) * 1000},
-            {"verdict": "rejected", "page": "huddle", "reason": "Image quality"},
-            {"verdict": "studio_pick", "page": "huddle", "headline": "X"}]
-    rec = L.build("huddle", bare, NFL, NOW)
+    bare = [{"verdict": "approved", "page": "demo-sports", "decided_at": (NOW - DAY) * 1000},
+            {"verdict": "rejected", "page": "demo-sports", "reason": "Image quality"},
+            {"verdict": "studio_pick", "page": "demo-sports", "headline": "X"}]
+    rec = L.build("demo-sports", bare, NFL, NOW)
     assert rec["notes"] == [] and rec["photos"] == {} and rec["note_themes"] == []
     assert rec["other"]["studio_photo_picks"] == 0
     old = {"kinds": {"quote": {"label": "Quote", "approved": 3, "n": 4}}, "rules": ["PREFER Quote"]}   # built before notes
@@ -139,7 +139,7 @@ def test_image_rejections_make_a_photo_rule_and_a_small_weight():
                + [rv("approved", f"Q{i} SIGNS", photo=FRAME) for i in range(2)]
                + [rv("approved", f"R{i} SIGNS", photo=LEAD) for i in range(20)]
                + [rv("rejected", f"S{i} SIGNS", reason="Weak story", photo=LEAD) for i in range(10)])   # not about the photo
-    rec = L.build("huddle", reviews, NFL, NOW)
+    rec = L.build("demo-sports", reviews, NFL, NOW)
     f = rec["photos"]["frame"]
     assert (f["approved"], f["image_rejected"], f["rule"]) == (2, 4, True)
     assert rec["photos"]["source:web"]["image_rejected"] == 0 and rec["photos"]["source:web"]["approved"] == 20
@@ -154,7 +154,7 @@ def test_image_rejections_make_a_photo_rule_and_a_small_weight():
     assert L.photo_weight(rec, {"source": "x"}) == 1.0                # an X photo that isn't a frame: not demoted
     assert rec["other"]["image_rejections"][0]["photo"] == ["flag:soft", "frame", "source:x"]
     # too few to say anything: neutral
-    few = L.build("huddle", [rv("rejected", "P OUT", reason="Image quality", photo=FRAME)] * 2
+    few = L.build("demo-sports", [rv("rejected", "P OUT", reason="Image quality", photo=FRAME)] * 2
                   + [rv("approved", "Q SIGNS", photo=LEAD)], NFL, NOW)
     assert few["photos"]["frame"]["mult"] == 1.0 and not few["photo_rules"] and L.photo_weight(few, FRAME) == 1.0
 
@@ -163,11 +163,11 @@ def test_studio_picks_and_the_candidates_passed_over():
     news = {"source": "news", "consensus": 3, "rank": 1, "of": 4, "passed": [FRAME]}
     reviews = [rv("studio_pick", f"S{i}", photo=news, draft_id=f"b:{i}") for i in range(7)] + \
               [rv("studio_pick", "U", photo={"source": "uploaded", "rank": None, "of": 3, "passed": [FRAME, LEAD]})]
-    rec = L.build("huddle", reviews, NFL, NOW)
+    rec = L.build("demo-sports", reviews, NFL, NOW)
     assert rec["photos"]["frame"]["passed"] == 8 and rec["photos"]["frame"]["picked"] == 0
     assert rec["photos"]["consensus"]["picked"] == 7
     assert not any("passed over" in r for r in rec["rules"])          # a pass weighs half: 8 aren't enough yet
-    more = L.build("huddle", reviews + [rv("studio_pick", f"T{i}", photo=news, draft_id=f"c:{i}") for i in range(3)], NFL, NOW)
+    more = L.build("demo-sports", reviews + [rv("studio_pick", f"T{i}", photo=news, draft_id=f"c:{i}") for i in range(3)], NFL, NOW)
     assert any("in the Studio editors passed over a video frame / flagged 'soft' / a photo from an X post 11 times "
                "and picked it 0 times" in r for r in more["rules"])
     assert L.photo_weight(more, {"source": "news", "consensus": 3}) > 1.0 > L.photo_weight(more, FRAME)
@@ -222,13 +222,13 @@ def test_story_images_nudge_own_photos_of_about_the_same_size(cfg, monkeypatch):
 
 def test_draft_records_which_photo_it_used(tmp_path):
     from bore import routine as R
-    d = tmp_path / "huddle-202610130000-x"
+    d = tmp_path / "demo-sports-202610130000-x"
     d.mkdir()
     photos = [{"index": 0, "file": "photos/0.jpg", "url": "https://img.example.com/0.jpg", "source": "web", "credit": "example.com"},
               {"index": 1, "file": "photos/1.jpg", "url": "https://img.example.com/1.mp4#t=3", "source": "x", "credit": "@a",
                "note": "video frame", "via": "frame at 3s of the video in @a's post", "flags": ["soft (sharpness 30)"],
                "consensus": 2}]
-    brief = {"id": d.name, "page": "huddle", "page_name": "Huddle", "posts": [], "verification": {"route": "corroborated"},
+    brief = {"id": d.name, "page": "demo-sports", "page_name": "Demo Sports", "posts": [], "verification": {"route": "corroborated"},
              "photos": photos}
     (d / "brief.json").write_text(json.dumps(brief))
     (d / "copy.json").write_text(json.dumps({"caption": "c", "headline_lines": ["A"], "photo_index": 1}))
@@ -263,8 +263,8 @@ class _Dash:
 def test_a_new_note_rebuilds_the_lessons_within_the_hour(monkeypatch, tmp_path):
     from types import SimpleNamespace
     monkeypatch.setattr(L, "PRIVATE", tmp_path)
-    page = [SimpleNamespace(slug="huddle")]
-    built = L.build("huddle", [], NFL, NOW - 3600)
+    page = [SimpleNamespace(slug="demo-sports")]
+    built = L.build("demo-sports", [], NFL, NOW - 3600)
     note = rv("feedback", "A SIGNS", reason="Redo", note="use a closer photo", days_ago=0.01)
     dash = _Dash(built, [note])
     L.refresh(dash, page, now=NOW, quiet=True)
@@ -272,6 +272,6 @@ def test_a_new_note_rebuilds_the_lessons_within_the_hour(monkeypatch, tmp_path):
     later = _Dash(dash.saved[0], [note])                      # nothing new since: no rebuild
     L.refresh(later, page, now=NOW + 60, quiet=True)
     assert later.saved == [] and later.asked == [2]
-    assert not L.new_notes(built, [rv("approved", "B", days_ago=0.01)], "huddle")              # no note
-    assert not L.new_notes(built, [{**note, "page": "culture-rush"}], "huddle")               # another page
-    assert not L.new_notes(built, [rv("withdrawn", "C", note="locked", days_ago=0.01)], "huddle")
+    assert not L.new_notes(built, [rv("approved", "B", days_ago=0.01)], "demo-sports")              # no note
+    assert not L.new_notes(built, [{**note, "page": "demo-celeb"}], "demo-sports")               # another page
+    assert not L.new_notes(built, [rv("withdrawn", "C", note="locked", days_ago=0.01)], "demo-sports")

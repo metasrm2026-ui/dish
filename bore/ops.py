@@ -463,7 +463,7 @@ def _is_request(brief: Path) -> bool:
 
 
 def _norm_warning(text: str) -> str:
-    """'huddle: 5 handle(s) produced nothing in 72h (renamed?): a, b' -> 'huddle: N handle(s) produced
+    """'demo-page: 5 handle(s) produced nothing in 72h (renamed?): a, b' -> 'demo-page: N handle(s) produced
     nothing in Nh': no handle names (source lists are confidential), no counts (the same every run)."""
     slug, sep, rest = text.strip().partition(": ")
     if not (sep and re.fullmatch(r"[a-z0-9-]+", slug)):
@@ -485,7 +485,8 @@ def _plan(run: Run) -> dict:
     ids = lambda k: [x.get("id") for x in data.get(k) or []][:20]
     out = {"to_schedule": len(data.get("to_schedule") or []), "already_scheduled": len(data.get("already_scheduled") or []),
            "waiting_for_socialpilot": ids("waiting_for_socialpilot"), "superseded": ids("superseded"),
-           "interrupted": ids("interrupted"), "delete_in_socialpilot": ids("scheduled_but_superseded"), "no_account": no_account}
+           "interrupted": ids("interrupted"), "delete_in_socialpilot": ids("scheduled_but_superseded"), "no_account": no_account,
+           "page_not_live": ids("page_not_live")}        # approved, waiting for their page to be live again
     # what needs a person is not a degraded run: the health status reads these lists from the latest
     # plan's report and shows them as their own reason until they are done
     return out

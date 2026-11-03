@@ -1,14 +1,16 @@
-"""Post cards: HTML templates that recreate each page's own layouts, rendered to a 1080x1350
-JPEG with headless Chromium. Text is real type (never diffusion-drawn), photos are real.
+"""Post cards: HTML templates rendered to a 1080x1350 JPEG with headless Chromium. Text is real
+type (never diffusion-drawn), photos are real. Every layout is drawn in the page's theme (its
+colours, logo text and fonts from the dashboard, CardSpec.theme); none belongs to one page.
 
-Templates
-  culture-rush: headline (subject photo left, stacked white/yellow caps right, dek, logo),
-                casefile (true crime: polaroid photos, paper note, headline)
-  huddle:       quote (team colour, cut-out speaker, label + quote boxes, highlight word),
-                report (full-bleed photo, REPORT stamp, huge headline, stat bar, NEXT UP footer),
-                topic  (field green, stacked yellow/white question boxes, photo inset)
-  any page:     the generic layouts (bore/layouts.py), and template specs: a template as data
-                (bore/tspec.py, docs/TEMPLATE_SPEC.md), drawn when CardSpec.tspec is set
+Themed layouts (text over the photo; the face is kept clear of it, plan_layout)
+  side_headline  subject photo left, stacked caps right (ink, then accent), dek band, logo
+  spotlight      the subject large across the top, the headline stacked below
+  casefile       true crime: polaroid photos, paper note, headline
+  speaker        the speaker's photo, label + quote boxes, highlight word, logo wordmark
+  report         full-bleed photo, stamp, huge headline, stat bar, footer
+  topic          striped backdrop, stacked question boxes, photo inset
+Also on any page: the generic layouts (bore/layouts.py, text never on the photo), and template
+specs: a template as data (bore/tspec.py, docs/TEMPLATE_SPEC.md), drawn when CardSpec.tspec is set.
 """
 from __future__ import annotations
 
@@ -24,44 +26,6 @@ from .config import ROOT
 
 W, H = 1080, 1350
 FONTS = ROOT / "assets" / "fonts"
-TEAMS_DIR = ROOT / "assets" / "teams"
-
-# Primary, secondary, accent (hex). Used for team-colour backgrounds, bars and highlights.
-NFL_TEAMS = {
-    "cardinals": ("#97233F", "#000000", "#FFB612"), "falcons": ("#A71930", "#000000", "#A5ACAF"),
-    "ravens": ("#241773", "#000000", "#9E7C0C"), "bills": ("#00338D", "#C60C30", "#FFFFFF"),
-    "panthers": ("#0085CA", "#101820", "#BFC0BF"), "bears": ("#0B162A", "#C83803", "#FFFFFF"),
-    "bengals": ("#FB4F14", "#000000", "#FFFFFF"), "browns": ("#311D00", "#FF3C00", "#FFFFFF"),
-    "cowboys": ("#041E42", "#869397", "#FFFFFF"), "broncos": ("#FB4F14", "#002244", "#FFFFFF"),
-    "lions": ("#0076B6", "#B0B7BC", "#FFFFFF"), "packers": ("#203731", "#FFB612", "#FFFFFF"),
-    "texans": ("#03202F", "#A71930", "#FFFFFF"), "colts": ("#002C5F", "#A2AAAD", "#FFFFFF"),
-    "jaguars": ("#006778", "#D7A22A", "#101820"), "chiefs": ("#E31837", "#FFB81C", "#FFFFFF"),
-    "raiders": ("#000000", "#A5ACAF", "#FFFFFF"), "chargers": ("#0080C6", "#FFC20E", "#FFFFFF"),
-    "rams": ("#003594", "#FFA300", "#FFFFFF"), "dolphins": ("#008E97", "#FC4C02", "#FFFFFF"),
-    "vikings": ("#4F2683", "#FFC62F", "#FFFFFF"), "patriots": ("#002244", "#C60C30", "#B0B7BC"),
-    "saints": ("#101820", "#D3BC8D", "#FFFFFF"), "giants": ("#0B2265", "#A71930", "#FFFFFF"),
-    "jets": ("#125740", "#FFFFFF", "#000000"), "eagles": ("#004C54", "#A5ACAF", "#FFFFFF"),
-    "steelers": ("#101820", "#FFB612", "#FFFFFF"), "49ers": ("#AA0000", "#B3995D", "#FFFFFF"),
-    "seahawks": ("#002244", "#69BE28", "#A5ACAF"), "buccaneers": ("#D50A0A", "#34302B", "#FF7900"),
-    "titans": ("#0C2340", "#4B92DB", "#C8102E"), "commanders": ("#5A1414", "#FFB612", "#FFFFFF"),
-    "nfl": ("#013369", "#D50A0A", "#FFFFFF"),
-}
-# The teams' cities: where a team plays ("Green Bay Packers"), never whom a story is about
-NFL_CITIES = ("Arizona", "Atlanta", "Baltimore", "Buffalo", "Carolina", "Chicago", "Cincinnati", "Cleveland", "Dallas",
-              "Denver", "Detroit", "Green Bay", "Houston", "Indianapolis", "Jacksonville", "Kansas City", "Las Vegas",
-              "Los Angeles", "Miami", "Minnesota", "New England", "New Orleans", "New York", "Philadelphia",
-              "Pittsburgh", "San Francisco", "Seattle", "Tampa Bay", "Tennessee", "Washington")
-TEAM_ALIASES = {"niners": "49ers", "bucs": "buccaneers", "washington": "commanders",
-                "kansas city": "chiefs", "philadelphia": "eagles", "dallas": "cowboys"}
-
-
-def team_colors(team: str) -> tuple[str, str, str]:
-    t = (team or "").lower().strip()
-    t = TEAM_ALIASES.get(t, t)
-    for key, cols in NFL_TEAMS.items():
-        if key == t or key in t:
-            return cols
-    return NFL_TEAMS["nfl"]
 
 
 @dataclass
@@ -75,18 +39,17 @@ class CardSpec:
     stat_value: str = ""
     footer: str = ""
     footer_sub: str = ""
-    team: str = ""
     photos: list[bytes] = field(default_factory=list)   # best first
     cutout: bytes | None = None                          # RGBA PNG of the subject, if made
     focus: tuple[float, float] | None = None             # face centre in photos[0], 0-1 (x, y)
     face_size: float = 0.0                               # face height / photo height
     face_box: tuple[float, float, float, float] | None = None  # face (x, y, w, h) in photos[0], 0-1
-    text_at: str = "top"                                 # report template: headline "top" or "bottom"
+    text_at: str = "top"                                 # report layout: headline "top" or "bottom"
     art: bytes | None = None                             # Krea-made backdrop art (no people, no text)
     fit: str = "cover"                                   # spotlight: "contain" shows the whole photo (close-ups)
     distress: bool = True                                # worn-print headline lettering
     items: list = field(default_factory=list)            # generic layouts: rows / names / dates (layouts.py)
-    theme: dict | None = None                            # generic layouts: the page's colours and logo text
+    theme: dict | None = None                            # the page's colours, logo text and fonts (layouts.theme_of)
     tspec: dict | None = None                            # a template spec (bore/tspec.py) draws the card instead
     slots: dict = field(default_factory=dict)            # template spec: copy.json's slots
     photo_faces: list = field(default_factory=list)      # template spec: faces per photo, (x, y, w, h) 0-1
@@ -162,22 +125,18 @@ async function fit() {
 fit();
 """
 
-CROWN_SVG = ("<svg viewBox='0 0 100 70' width='86' height='60'><path d='M6 60 L12 18 L32 40 L50 6 L68 40 L88 18 "
-             "L94 60 Z' fill='none' stroke='#ffe01b' stroke-width='7' stroke-linejoin='round'/></svg>")
-
-
 def _photo_style(pos: str = "50% 25%") -> str:
     return f"object-fit: cover; object-position: {pos};"
 
 
-# Where each template wants the face centre (x, y) inside its photo box, so the face sits in the
+# Where each layout wants the face centre (x, y) inside its photo box, so the face sits in the
 # area that never carries text. Box sizes match the CSS below.
 FACE_TARGETS = {
-    ("culture-rush", "headline"): ((760, 1350), (0.30, 0.44)),   # left half, clear of the right-side headline
-    ("culture-rush", "spotlight"): ((1080, 880), (0.50, 0.40)),  # big photo on top, headline below
-    ("huddle", "report"): ((1080, 1350), (0.50, 0.62)),          # between the top headline and the footer
-    ("huddle", "quote"): ((760, 1350), (0.55, 0.30)),            # upper right, above the quote boxes
-    ("huddle", "topic"): ((1008, 760), (0.50, 0.40)),            # inside the inset
+    "side_headline": ((760, 1350), (0.30, 0.44)),   # left half, clear of the right-side headline
+    "spotlight": ((1080, 880), (0.50, 0.40)),       # big photo on top, headline below
+    "report": ((1080, 1350), (0.50, 0.62)),         # between the top headline and the footer
+    "speaker": ((760, 1350), (0.55, 0.30)),         # upper right, above the quote boxes
+    "topic": ((1008, 760), (0.50, 0.40)),           # inside the inset
 }
 
 
@@ -223,44 +182,44 @@ def face_on_card(img: bytes, box_xywh: tuple[int, int, int, int], pos: str, face
     return (ox + x * sw, oy + y * sh, ox + (x + w) * sw, oy + (y + h) * sh)
 
 
-# Text zones per template (card pixels) that a face must never touch.
+# Text zones per layout and variant (card pixels) that a face must never touch.
 TEXT_ZONES = {
-    ("huddle", "report", "top"): [(0, 0, 1080, 600), (0, 1150, 1080, 1350)],
-    ("huddle", "report", "bottom"): [(0, 700, 1080, 1350)],
-    ("culture-rush", "headline", "top"): [(440, 150, 1080, 1350), (0, 0, 420, 330)],
-    ("culture-rush", "spotlight", "top"): [(0, 850, 1080, 1350), (0, 0, 330, 220)],
-    ("huddle", "quote", "top"): [(0, 700, 1080, 1350), (0, 0, 620, 420)],
-    ("huddle", "topic", "top"): [(0, 0, 1080, 530)],
+    ("report", "top"): [(0, 0, 1080, 600), (0, 1150, 1080, 1350)],
+    ("report", "bottom"): [(0, 700, 1080, 1350)],
+    ("side_headline", "top"): [(440, 150, 1080, 1350), (0, 0, 420, 330)],
+    ("spotlight", "top"): [(0, 850, 1080, 1350), (0, 0, 330, 220)],
+    ("speaker", "top"): [(0, 700, 1080, 1350), (0, 0, 620, 420)],
+    ("topic", "top"): [(0, 0, 1080, 530)],
 }
 PHOTO_BOXES = {
-    ("culture-rush", "headline"): (0, 0, 760, 1350), ("culture-rush", "spotlight"): (0, 0, 1080, 880),
-    ("huddle", "report"): (0, 0, 1080, 1350),
-    ("huddle", "quote"): (320, 0, 760, 1350), ("huddle", "topic"): (36, 554, 1008, 760),
+    "side_headline": (0, 0, 760, 1350), "spotlight": (0, 0, 1080, 880), "report": (0, 0, 1080, 1350),
+    "speaker": (320, 0, 760, 1350), "topic": (36, 554, 1008, 760),
 }
 
 
 def plan_layout(page: str, spec: "CardSpec") -> list[str]:
     """Choose the layout variant that keeps the face clear of every text zone. Returns problems
-    (empty when the face is clear or no face is known)."""
+    (empty when the face is clear or no face is known). The same for every page: `page` only names
+    it (the layout and the theme come in the spec)."""
     if spec.tspec is not None:      # a template spec plans its own zones (bore/tspec.py)
         from .tspec import plan
         return plan(spec).problems
-    tpl = spec.template or {"culture-rush": "headline", "huddle": "report"}.get(page, "")
-    if not (spec.face_box and spec.photos and (page, tpl) in PHOTO_BOXES):
+    tpl = spec.template
+    if not (spec.face_box and spec.photos and tpl in PHOTO_BOXES):
         return []
     fx, fy, fw, fh = spec.face_box
     head = (fx - 0.18 * fw, fy - 0.45 * fh, fw * 1.36, fh * 1.53)   # same zone as guard.head_zone
-    variants = ["top", "bottom"] if (page, tpl) == ("huddle", "report") else ["top"]
+    variants = ["top", "bottom"] if tpl == "report" else ["top"]
     for v in variants:
         spec.text_at = v
-        pos = _pos(page, tpl, spec, "50% 35%")
-        zone = face_on_card(spec.photos[0], PHOTO_BOXES[(page, tpl)], pos, head)
-        if not any(_hits(zone, z) for z in TEXT_ZONES.get((page, tpl, v), [])):
+        pos = _pos(tpl, spec, "50% 35%")
+        zone = face_on_card(spec.photos[0], PHOTO_BOXES[tpl], pos, head)
+        if not any(_hits(zone, z) for z in TEXT_ZONES.get((tpl, v), [])):
             return []
-    if (page, tpl) == ("culture-rush", "spotlight"):   # a tight close-up: show the whole photo
+    if tpl == "spotlight":            # a tight close-up: show the whole photo
         spec.text_at = "top"
-        zone = face_on_card_contain(spec.photos[0], PHOTO_BOXES[(page, tpl)], head)
-        if not any(_hits(zone, z) for z in TEXT_ZONES[(page, tpl, "top")]):
+        zone = face_on_card_contain(spec.photos[0], PHOTO_BOXES[tpl], head)
+        if not any(_hits(zone, z) for z in TEXT_ZONES[(tpl, "top")]):
             spec.fit = "contain"
             return []
     spec.text_at = variants[0]
@@ -272,108 +231,137 @@ def _hits(a, b) -> bool:
     return min(a[2], b[2]) > max(a[0], b[0]) and min(a[3], b[3]) > max(a[1], b[1])
 
 
-def _pos(page: str, tpl: str, spec: "CardSpec", default: str) -> str:
-    t = FACE_TARGETS.get((page, tpl))
+def _pos(tpl: str, spec: "CardSpec", default: str) -> str:
+    t = FACE_TARGETS.get(tpl)
     if not (t and spec.focus and spec.photos):
         return default
     target = t[1]
-    if (page, tpl) == ("huddle", "report") and spec.text_at == "bottom":
+    if tpl == "report" and spec.text_at == "bottom":
         target = (0.5, 0.26)
     return focus_position(spec.photos[0], t[0], spec.focus, target)
 
 
-# --------------------------------------------------------------------------- culture rush
-def culture_rush_headline(spec: CardSpec) -> str:
+# ------------------------------------------------------------------------- themed layouts
+def _on_white(t: dict) -> str:
+    """A highlight colour that reads on the white quote and question boxes: the accent, unless it is
+    too light, then the background colour (or near-black)."""
+    from .layouts import luminance
+    if luminance(t["accent"]) < 150:
+        return t["accent"]
+    return t["bg"] if luminance(t["bg"]) < 150 else "#111111"
+
+
+def _logo_words(t: dict, cls: str = "") -> str:
+    """The theme's logo text in the logo font, its words split over two lines (ink, then accent).
+    No logo text: no logo."""
+    words = t["logo_text"].upper().split()
+    if not words:
+        return ""
+    cut = max(1, len(words) // 2)
+    return (f'<span class="w1 {cls}">{_esc(" ".join(words[:cut]))}</span>'
+            + (f'<span class="w2 {cls}">{_esc(" ".join(words[cut:]))}</span>' if words[cut:] else ""))
+
+
+def side_headline(spec: CardSpec, t: dict) -> str:
+    acc, bg, ink, font, lf = t["accent"], t["bg"], t["ink"], t["font"], t["logo_font"]
+    from .layouts import contrast_ink
     photo = _data_uri(spec.photos[0], _img_mime(spec.photos[0])) if spec.photos else ""
-    lines = [l.upper() for l in spec.headline_lines if l.strip()][:4] or ["CULTURE RUSH"]
-    # alternate white / yellow, with the highlight word forced yellow
+    lines = [l.upper() for l in spec.headline_lines if l.strip()][:4] or ["NEWS"]
+    # ink, then accent, with the highlight word forced to the accent
     parts = []
     for i, l in enumerate(lines):
-        color = "#ffe01b" if (i >= len(lines) / 2) else "#ffffff"
+        color = acc if (i >= len(lines) / 2) else ink
         if spec.highlight and spec.highlight.upper() in l:
-            color = "#ffe01b"
+            color = acc
         parts.append(f'<span class="fit hl-line" data-max="210" data-min="60" data-w="560" style="color:{color}">{_esc(l)}</span>')
     dek = _esc(spec.dek)
+    logo = _logo_words(t)
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>{BASE_CSS}
-.bg {{ position:absolute; inset:0; background: radial-gradient(ellipse at 70% 40%, #1c1c1c, #050505 70%); }}
-.photo {{ position:absolute; left:0; top:0; width:760px; height:{H}px; {_photo_style(_pos('culture-rush', 'headline', spec, '50% 20%'))}
+.bg {{ position:absolute; inset:0; background: radial-gradient(ellipse at 70% 40%, color-mix(in srgb, {bg} 85%, #fff), {bg} 70%); }}
+.photo {{ position:absolute; left:0; top:0; width:760px; height:{H}px; {_photo_style(_pos('side_headline', spec, '50% 20%'))}
   -webkit-mask-image: linear-gradient(to right, #000 62%, transparent 98%); filter: contrast(1.03); }}
-.shade {{ position:absolute; inset:0; background: linear-gradient(to right, transparent 35%, rgba(0,0,0,.78) 62%, #000 100%),
-  linear-gradient(to top, rgba(0,0,0,.85), transparent 38%); }}
-.torn {{ position:absolute; right:-10px; top:0; width:26px; height:{H}px; background:#ffe01b; opacity:.9;
+.shade {{ position:absolute; inset:0; background: linear-gradient(to right, transparent 35%, color-mix(in srgb, {bg} 78%, transparent) 62%, {bg} 100%),
+  linear-gradient(to top, color-mix(in srgb, {bg} 85%, transparent), transparent 38%); }}
+.torn {{ position:absolute; right:-10px; top:0; width:26px; height:{H}px; background:{acc}; opacity:.9;
   clip-path: polygon(40% 0,100% 0,100% 100%,30% 100%,60% 93%,20% 86%,55% 78%,25% 70%,65% 61%,30% 52%,60% 44%,22% 35%,58% 27%,28% 18%,62% 9%); }}
 .logo {{ position:absolute; left:44px; top:40px; transform: rotate(-5deg); text-align:center; filter: drop-shadow(0 4px 10px rgba(0,0,0,.8)); }}
-.logo .w1 {{ font-family: Marker; font-size: 64px; color:#fff; line-height:.9; display:block; }}
-.logo .w2 {{ font-family: Marker; font-size: 64px; color:#ffe01b; line-height:.9; display:block; margin-top:-4px; }}
+.logo .w1 {{ font-family: {lf}; font-size: 64px; color:{ink}; line-height:.9; display:block; }}
+.logo .w2 {{ font-family: {lf}; font-size: 64px; color:{acc}; line-height:.9; display:block; margin-top:-4px; }}
 .headline {{ position:absolute; right:56px; top:250px; width:560px; text-align:right; }}
 .stack {{ display:flex; flex-direction:column; align-items:flex-end; }}
-.hl-line {{ font-family: Anton; line-height:.98; letter-spacing:1px; text-shadow: 0 6px 18px rgba(0,0,0,.9); }}
+.hl-line {{ font-family: {font}; line-height:.98; letter-spacing:1px; text-shadow: 0 6px 18px rgba(0,0,0,.9); }}
 .dekband {{ position:absolute; left:0; right:0; bottom:70px; height:180px; display:flex; align-items:center; justify-content:flex-end; padding: 0 60px; }}
-.dekband::before {{ content:''; position:absolute; right:30px; width:640px; height:120px; background:#ffe01b; transform: rotate(-2deg);
+.dekband::before {{ content:''; position:absolute; right:30px; width:640px; height:120px; background:{acc}; transform: rotate(-2deg);
   clip-path: polygon(2% 12%,98% 0,100% 88%,4% 100%,0 55%); opacity:.95; }}
-.dek {{ position:relative; font-family: Inter; font-weight:800; font-size:40px; line-height:1.12; color:#0a0a0a; max-width:560px; text-align:right; }}
+.dek {{ position:relative; font-family: Inter; font-weight:800; font-size:40px; line-height:1.12; color:{contrast_ink(acc)}; max-width:560px; text-align:right; }}
 </style></head><body><div class="card">
 <div class="bg"></div><div class="grit"></div><div class="noise"></div>{f'<img class="photo" src="{photo}">' if photo else ''}<div class="shade"></div>
 <div class="torn"></div>
-<div class="logo">{CROWN_SVG}<span class="w1">CULTURE</span><span class="w2">RUSH</span></div>
+{f'<div class="logo">{logo}</div>' if logo else ''}
 <div class="headline"><div class="stack" data-uniform="1.0">{''.join(parts)}</div></div>
 {f'<div class="dekband"><div class="dek">{dek}</div></div>' if dek else ''}
 </div><script>{FIT_JS}</script></body></html>"""
 
 
-def culture_rush_spotlight(spec: CardSpec) -> str:
-    """Photo-first celebrity card: the subject large across the top, the headline stacked below.
-    Fits any face position, so it is the fallback when the photo-left layout would cover a face."""
+def spotlight(spec: CardSpec, t: dict) -> str:
+    """Photo-first card: the subject large across the top, the headline stacked below. Fits any
+    face position, so it is the fallback when side_headline would cover a face."""
+    acc, bg, ink, font, lf = t["accent"], t["bg"], t["ink"], t["font"], t["logo_font"]
+    from .layouts import contrast_ink
     photo = _data_uri(spec.photos[0], _img_mime(spec.photos[0])) if spec.photos else ""
-    lines = [l.upper() for l in spec.headline_lines if l.strip()][:3] or ["CULTURE RUSH"]
+    lines = [l.upper() for l in spec.headline_lines if l.strip()][:3] or ["NEWS"]
     parts = []
     for i, l in enumerate(lines):
-        color = "#ffe01b" if (i >= len(lines) / 2 or (spec.highlight and spec.highlight.upper() in l)) else "#ffffff"
+        color = acc if (i >= len(lines) / 2 or (spec.highlight and spec.highlight.upper() in l)) else ink
         parts.append(f'<div><span class="fit hl-line" data-max="{150 if len(lines) > 2 else 175}" data-min="60" '
                      f'data-w="990" style="color:{color}">{_esc(l)}</span></div>')
     dek = _esc(spec.dek)
     tag = _esc(spec.label.upper()) if spec.label else ""
+    logo = _logo_words(t)
+    on_acc = contrast_ink(acc)
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>{BASE_CSS}
-.bg {{ position:absolute; inset:0; background: radial-gradient(ellipse at 50% 80%, #1c1c1c, #050505 70%); }}
-.photo {{ position:absolute; left:0; top:0; width:{W}px; height:880px; {_photo_style(_pos('culture-rush', 'spotlight', spec, '50% 25%'))}
+.bg {{ position:absolute; inset:0; background: radial-gradient(ellipse at 50% 80%, color-mix(in srgb, {bg} 85%, #fff), {bg} 70%); }}
+.photo {{ position:absolute; left:0; top:0; width:{W}px; height:880px; {_photo_style(_pos('spotlight', spec, '50% 25%'))}
   -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%); filter: contrast(1.03); }}
 .photo.blur {{ object-position: 50% 50%; filter: blur(36px) brightness(.4); transform: scale(1.15); }}
 .photo.whole {{ object-fit: contain; object-position: 50% 50%; }}
-.shade {{ position:absolute; inset:0; background: linear-gradient(to bottom, rgba(0,0,0,.35) 0%, transparent 16%, transparent 52%, rgba(0,0,0,.55) 64%, #000 74%); }}
-.tear {{ position:absolute; left:-10px; right:-10px; top:806px; height:70px; background:#050505; opacity:.92;
+.shade {{ position:absolute; inset:0; background: linear-gradient(to bottom, rgba(0,0,0,.35) 0%, transparent 16%, transparent 52%, color-mix(in srgb, {bg} 55%, transparent) 64%, {bg} 74%); }}
+.tear {{ position:absolute; left:-10px; right:-10px; top:806px; height:70px; background:{bg}; opacity:.92;
   clip-path: polygon(0 55%,6% 30%,12% 60%,19% 25%,27% 55%,34% 20%,41% 50%,49% 28%,57% 58%,64% 22%,72% 52%,80% 26%,87% 56%,94% 30%,100% 50%,100% 100%,0 100%); }}
-.stripe {{ position:absolute; right:-6px; top:0; width:22px; height:900px; background:#ffe01b; opacity:.9;
+.stripe {{ position:absolute; right:-6px; top:0; width:22px; height:900px; background:{acc}; opacity:.9;
   clip-path: polygon(40% 0,100% 0,100% 100%,30% 100%,60% 90%,20% 78%,55% 64%,25% 50%,65% 36%,30% 22%,60% 10%); }}
 .logo {{ position:absolute; left:40px; top:34px; transform: rotate(-5deg); text-align:center; filter: drop-shadow(0 4px 10px rgba(0,0,0,.8)); }}
-.logo .w1, .logo .w2 {{ font-family: Marker; font-size: 50px; line-height:.9; display:block; }}
-.logo .w1 {{ color:#fff; }} .logo .w2 {{ color:#ffe01b; margin-top:-4px; }}
+.logo .w1, .logo .w2 {{ font-family: {lf}; font-size: 50px; line-height:.9; display:block; }}
+.logo .w1 {{ color:{ink}; }} .logo .w2 {{ color:{acc}; margin-top:-4px; }}
 .text {{ position:absolute; left:45px; right:45px; top:{860 if tag else 880}px; text-align:center; }}
-.tag {{ display:inline-block; background:#ffe01b; color:#0a0a0a; font-family:Anton; font-size:40px; padding:0 18px 3px; transform: rotate(-2deg); margin-bottom:6px; }}
-.hl-line {{ font-family: Anton; line-height:1.0; letter-spacing:1px; text-shadow: 0 6px 18px rgba(0,0,0,.9); }}
+.tag {{ display:inline-block; background:{acc}; color:{on_acc}; font-family:{font}; font-size:40px; padding:0 18px 3px; transform: rotate(-2deg); margin-bottom:6px; }}
+.hl-line {{ font-family: {font}; line-height:1.0; letter-spacing:1px; text-shadow: 0 6px 18px rgba(0,0,0,.9); }}
 .dek {{ position:absolute; left:0; right:0; bottom:34px; display:flex; justify-content:center; }}
-.dek span {{ position:relative; isolation:isolate; font-family: Inter; font-weight:800; font-size:34px; line-height:1.15; color:#0a0a0a; padding:10px 34px; max-width:900px; text-align:center; }}
-.dek span::before {{ content:''; position:absolute; inset:0; z-index:-1; background:#ffe01b; transform: rotate(-1.5deg);
+.dek span {{ position:relative; isolation:isolate; font-family: Inter; font-weight:800; font-size:34px; line-height:1.15; color:{on_acc}; padding:10px 34px; max-width:900px; text-align:center; }}
+.dek span::before {{ content:''; position:absolute; inset:0; z-index:-1; background:{acc}; transform: rotate(-1.5deg);
   clip-path: polygon(1% 10%,99% 0,100% 90%,2% 100%); }}
 </style></head><body><div class="card">
 <div class="bg"></div><div class="grit"></div><div class="noise"></div>{(f'<img class="photo blur" src="{photo}"><img class="photo whole" src="{photo}">' if spec.fit == "contain" else f'<img class="photo" src="{photo}">') if photo else ''}<div class="shade"></div><div class="tear"></div>
 <div class="stripe"></div>
-<div class="logo">{CROWN_SVG.replace("width='86' height='60'", "width='66' height='46'")}<span class="w1">CULTURE</span><span class="w2">RUSH</span></div>
+{f'<div class="logo">{logo}</div>' if logo else ''}
 <div class="text">{f'<div class="tag">{tag}</div>' if tag else ''}<div class="stack" data-uniform="1.0">{''.join(parts)}</div></div>
 {f'<div class="dek"><span>{dek}</span></div>' if dek else ''}
 </div><script>{FIT_JS}</script></body></html>"""
 
 
-def culture_rush_casefile(spec: CardSpec) -> str:
+def casefile(spec: CardSpec, t: dict) -> str:
+    acc, bg, ink, font, lf = t["accent"], t["bg"], t["ink"], t["font"], t["logo_font"]
     photos = [_data_uri(p, _img_mime(p)) for p in spec.photos[:3]]
     rots = [-6, 2, 7]
     pol = "".join(
         f'<div class="pol" style="transform:rotate({rots[i]}deg)"><img src="{u}"></div>' for i, u in enumerate(photos))
     lines = [l.upper() for l in spec.headline_lines if l.strip()][:2] or ["UNSOLVED"]
     head = "".join(
-        f'<div><span class="fit" data-max="170" data-min="60" data-w="980" style="color:{"#ffe01b" if i else "#fff"}">{_esc(l)}</span></div>'
+        f'<div><span class="fit" data-max="170" data-min="60" data-w="980" style="color:{acc if i else ink}">{_esc(l)}</span></div>'
         for i, l in enumerate(lines))
+    logo = _logo_words(t)
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>{BASE_CSS}
-.bg {{ position:absolute; inset:0; background: radial-gradient(ellipse at 50% 35%, #3a3128, #0d0b09 75%); }}
+.bg {{ position:absolute; inset:0; background: radial-gradient(ellipse at 50% 35%, color-mix(in srgb, {bg} 70%, #6b5a48), {bg} 75%); }}
 .row {{ position:absolute; top:{200 if len(photos) < 3 else 230}px; left:30px; right:30px; display:flex; justify-content:center; gap:18px; }}
 .pol {{ background:#f3eee2; padding:14px 14px 48px; box-shadow: 0 18px 40px rgba(0,0,0,.7); width:{[600, 470, 318][max(len(photos), 1) - 1]}px; }}
 .pol img {{ width:100%; height:{[650, 600, 440][max(len(photos), 1) - 1]}px; {_photo_style('50% 25%')} display:block; }}
@@ -381,29 +369,19 @@ def culture_rush_casefile(spec: CardSpec) -> str:
   font-family: 'Courier New', monospace; font-weight:700; font-size:34px; color:#1b1b1b; text-align:center; box-shadow:0 10px 24px rgba(0,0,0,.6); }}
 .note b {{ color:#b3261e; }}
 .logo {{ position:absolute; left:40px; top:40px; transform: rotate(-5deg); text-align:center; z-index:3; }}
-.logo span {{ font-family: Marker; font-size: 40px; line-height:.9; display:block; }}
+.logo span {{ font-family: {lf}; font-size: 40px; line-height:.9; display:block; }}
+.logo .w1 {{ color:{ink}; }} .logo .w2 {{ color:{acc}; }}
 .head {{ position:absolute; left:50px; right:50px; bottom:90px; text-align:center; }}
-.head span {{ font-family: Anton; line-height:1; text-shadow: 0 8px 22px rgba(0,0,0,.9); }}
+.head span {{ font-family: {font}; line-height:1; text-shadow: 0 8px 22px rgba(0,0,0,.9); }}
 </style></head><body><div class="card"><div class="bg"></div><div class="grit"></div><div class="noise"></div>
-<div class="logo">{CROWN_SVG.replace("width='86' height='60'", "width='56' height='40'")}<span style="color:#fff">CULTURE</span><span style="color:#ffe01b">RUSH</span></div>
+{f'<div class="logo">{logo}</div>' if logo else ''}
 {f'<div class="note">{_hl(spec.label, spec.highlight, "b")}</div>' if spec.label else ''}
 <div class="row">{pol}</div>
 <div class="head">{head}</div></div><script>{FIT_JS}</script></body></html>"""
 
 
-# --------------------------------------------------------------------------------- huddle
-def _team_mark(team: str, color: str) -> str:
-    for ext in ("png", "webp", "svg"):
-        p = TEAMS_DIR / f"{(team or '').lower()}.{ext}"
-        if p.exists():
-            mime = {"png": "image/png", "webp": "image/webp", "svg": "image/svg+xml"}[ext]
-            return f'<img class="teamlogo" src="{_data_uri(p.read_bytes(), mime)}">'
-    name = _esc((team or "NFL").upper())
-    return f'<div class="wordmark">{name}</div>'
-
-
-def huddle_quote(spec: CardSpec) -> str:
-    c1, c2, c3 = team_colors(spec.team)
+def speaker(spec: CardSpec, t: dict) -> str:
+    acc, bg, ink, font = t["accent"], t["bg"], t["ink"], t["font"]
     subject = spec.cutout or (spec.photos[0] if spec.photos else None)
     is_cut = spec.cutout is not None
     img = _data_uri(subject, _img_mime(subject)) if subject else ""
@@ -418,90 +396,88 @@ def huddle_quote(spec: CardSpec) -> str:
         q_html += f'<div class="qbox"><span class="fit" data-max="92" data-min="40" data-w="820">{_hl(text, spec.highlight.upper())}</span></div>'
     photo_css = (f"right:-40px; bottom:0; height:1180px; width:auto; filter: drop-shadow(-12px 0 30px rgba(0,0,0,.55));"
                  if is_cut else
-                 f"right:0; top:0; width:760px; height:{H}px; {_photo_style(_pos('huddle', 'quote', spec, '50% 20%'))} -webkit-mask-image: linear-gradient(to left, #000 60%, transparent 100%);")
+                 f"right:0; top:0; width:760px; height:{H}px; {_photo_style(_pos('speaker', spec, '50% 20%'))} -webkit-mask-image: linear-gradient(to left, #000 60%, transparent 100%);")
+    mark = _esc(t["logo_text"].upper())
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>{BASE_CSS}
-.bg {{ position:absolute; inset:0; background: radial-gradient(ellipse at 60% 30%, {c1}, color-mix(in srgb, {c1} 55%, #000) 80%); }}
+.bg {{ position:absolute; inset:0; background: radial-gradient(ellipse at 60% 30%, color-mix(in srgb, {bg} 80%, #fff), {bg} 80%); }}
 .subject {{ position:absolute; {photo_css} }}
-.wordmark {{ position:absolute; left:56px; top:70px; font-family:Anton; font-size:150px; line-height:.9; color:#fff;
-  -webkit-text-stroke: 6px {c2 if c2.lower() != c1.lower() else '#000'}; paint-order: stroke fill; transform: rotate(-3deg);
+.wordmark {{ position:absolute; left:56px; top:70px; font-family:{font}; font-size:150px; line-height:.9; color:{ink};
+  -webkit-text-stroke: 6px {acc}; paint-order: stroke fill; transform: rotate(-3deg);
   text-shadow: 0 10px 24px rgba(0,0,0,.45); max-width:560px; }}
-.teamlogo {{ position:absolute; left:56px; top:70px; width:360px; filter: drop-shadow(0 12px 22px rgba(0,0,0,.5)); }}
 .bottom {{ position:absolute; left:48px; right:48px; bottom:70px; }}
 .speaker {{ display:inline-block; background:#0b0b0b; color:#fff; font-family:Oswald; font-weight:600; font-size:50px; padding:6px 18px; margin-bottom:10px; }}
 .qbox {{ display:table; background:#fff; padding:2px 18px 6px; margin-top:8px; box-shadow: 0 6px 16px rgba(0,0,0,.35); }}
-.qbox span {{ font-family:Anton; color:#0b0b0b; line-height:1.06; }}
-.hl {{ color: {c1 if c1.lower() not in ('#000000', '#101820') else '#d50a0a'}; }}
+.qbox span {{ font-family:{font}; color:#0b0b0b; line-height:1.06; }}
+.hl {{ color: {_on_white(t)}; }}
 </style></head><body><div class="card"><div class="bg"></div><div class="grit"></div><div class="noise"></div>
-{_team_mark(spec.team, c1)}{f'<img class="subject" src="{img}">' if img else ''}
+{f'<div class="wordmark">{mark}</div>' if mark else ''}{f'<img class="subject" src="{img}">' if img else ''}
 <div class="bottom">{f'<div class="speaker">{_esc(spec.label)}</div>' if spec.label else ''}{q_html}</div>
 </div><script>{FIT_JS}</script></body></html>"""
 
 
-def huddle_report(spec: CardSpec) -> str:
-    c1, c2, c3 = team_colors(spec.team)
+def report(spec: CardSpec, t: dict) -> str:
+    acc, bg, ink, font = t["accent"], t["bg"], t["ink"], t["font"]
+    from .layouts import contrast_ink
     img = _data_uri(spec.photos[0], _img_mime(spec.photos[0])) if spec.photos else ""
     lines = [l.upper() for l in spec.headline_lines if l.strip()][:2] or ["BREAKING"]
     head = "".join(f'<div><span class="fit" data-max="190" data-min="70" data-w="980">{_hl(l, spec.highlight.upper(), "hly")}</span></div>' for l in lines)
     stat = ""
     if spec.stat_value:
-        stat = (f'<div class="stat" style="background:{c1}"><div class="sl">{_esc(spec.stat_label.upper())}</div>'
+        stat = (f'<div class="stat"><div class="sl">{_esc(spec.stat_label.upper())}</div>'
                 f'<div class="sv fit" data-max="96" data-min="40" data-w="620">{_esc(spec.stat_value.upper())}</div></div>')
     footer = ""
     if spec.footer:
         footer = (f'<div class="footer"><span class="fit" data-max="78" data-min="36" data-w="1000">{_esc(spec.footer.upper())}</span>'
                   + (f'<div class="fsub">{_esc(spec.footer_sub.upper())}</div>' if spec.footer_sub else "") + "</div>")
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>{BASE_CSS}
-.photo {{ position:absolute; inset:0; width:{W}px; height:{H}px; {_photo_style(_pos('huddle', 'report', spec, '50% 35%'))} filter: contrast(1.04) saturate(1.05); }}
+.photo {{ position:absolute; inset:0; width:{W}px; height:{H}px; {_photo_style(_pos('report', spec, '50% 35%'))} filter: contrast(1.04) saturate(1.05); }}
 .shade {{ position:absolute; inset:0; background: {"linear-gradient(to bottom, rgba(0,0,0,.9) 0%, rgba(0,0,0,.7) 26%, rgba(0,0,0,.15) 46%, rgba(0,0,0,0) 56%, rgba(0,0,0,.35) 74%, rgba(0,0,0,.92) 100%)" if spec.text_at != "bottom" else "linear-gradient(to bottom, rgba(0,0,0,.35) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 44%, rgba(0,0,0,.72) 60%, rgba(0,0,0,.95) 100%)"}; }}
 .top {{ position:absolute; left:40px; right:40px; {'top:34px' if spec.text_at != 'bottom' else 'bottom:' + str(230 if spec.footer else 60) + 'px'}; text-align:center; }}
-.stamp {{ display:inline-block; background:#d11d1d; color:#fff; font-family:Anton; font-size:64px; padding:0 22px 4px; transform: rotate(-3deg);
+.stamp {{ display:inline-block; background:{acc}; color:{contrast_ink(acc)}; font-family:{font}; font-size:64px; padding:0 22px 4px; transform: rotate(-3deg);
   border:4px solid #fff; box-shadow: 0 8px 20px rgba(0,0,0,.6); letter-spacing:2px; }}
 .head {{ margin-top:6px; }}
-.head span {{ font-family:Anton; color:#fff; line-height:1.0; text-shadow: 0 6px 0 rgba(0,0,0,.35), 0 12px 30px rgba(0,0,0,.8); }}
-.head .hly {{ color:#ffd21f; }}
-.rule {{ height:6px; width:70%; margin:10px auto 0; background: linear-gradient(90deg, transparent, #ffd21f, transparent); }}
-.stat {{ position:absolute; left:34px; bottom:250px; padding:14px 30px 16px; transform: skewX(-8deg); box-shadow:0 10px 24px rgba(0,0,0,.6); max-width:700px; }}
-.stat .sl {{ font-family:Oswald; font-weight:700; color:#fff; font-size:34px; }}
-.stat .sv {{ font-family:Anton; color:#ffd21f; line-height:1; }}
-.footer {{ position:absolute; left:0; right:0; bottom:0; background: rgba(8,8,8,.92); padding:20px 40px 22px; text-align:center; border-top:5px solid #ffd21f; }}
-.footer span {{ font-family:Anton; color:#fff; line-height:1.05; }}
-.fsub {{ font-family:Oswald; font-weight:600; color:#ffd21f; font-size:34px; letter-spacing:3px; margin-top:4px; }}
+.head span {{ font-family:{font}; color:{ink}; line-height:1.0; text-shadow: 0 6px 0 rgba(0,0,0,.35), 0 12px 30px rgba(0,0,0,.8); }}
+.head .hly {{ color:{acc}; }}
+.rule {{ height:6px; width:70%; margin:10px auto 0; background: linear-gradient(90deg, transparent, {acc}, transparent); }}
+.stat {{ position:absolute; left:34px; bottom:250px; padding:14px 30px 16px; transform: skewX(-8deg); box-shadow:0 10px 24px rgba(0,0,0,.6); max-width:700px; background:{bg}; }}
+.stat .sl {{ font-family:Oswald; font-weight:700; color:{ink}; font-size:34px; }}
+.stat .sv {{ font-family:{font}; color:{acc}; line-height:1; }}
+.footer {{ position:absolute; left:0; right:0; bottom:0; background: color-mix(in srgb, {bg} 92%, transparent); padding:20px 40px 22px; text-align:center; border-top:5px solid {acc}; }}
+.footer span {{ font-family:{font}; color:{ink}; line-height:1.05; }}
+.fsub {{ font-family:Oswald; font-weight:600; color:{acc}; font-size:34px; letter-spacing:3px; margin-top:4px; }}
 </style></head><body><div class="card">{f'<img class="photo" src="{img}">' if img else ''}<div class="shade"></div>
 <div class="top">{f'<div class="stamp">{_esc((spec.label or "REPORT").upper())}</div>'}<div class="head">{head}</div><div class="rule"></div></div>
 {stat}{footer}</div><script>{FIT_JS}</script></body></html>"""
 
 
-def huddle_topic(spec: CardSpec) -> str:
+def topic(spec: CardSpec, t: dict) -> str:
+    acc, bg, font = t["accent"], t["bg"], t["font"]
+    from .layouts import contrast_ink
     img = _data_uri(spec.photos[0], _img_mime(spec.photos[0])) if spec.photos else ""
-    lines = [l.upper() for l in spec.headline_lines if l.strip()][:3] or ["NFL"]
+    lines = [l.upper() for l in spec.headline_lines if l.strip()][:3] or ["NEWS"]
     first, rest = lines[0], lines[1:]
     boxes = f'<div class="b1"><span class="fit" data-max="110" data-min="44" data-w="640">{_esc(first)}</span></div>'
     boxes += "".join(f'<div class="b2"><span class="fit" data-max="96" data-min="40" data-w="700">{_hl(l, spec.highlight.upper())}</span></div>' for l in rest)
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>{BASE_CSS}
-.bg {{ position:absolute; inset:0; background: repeating-linear-gradient(90deg, #244a22 0 90px, #1f421d 90px 180px); }}
+.bg {{ position:absolute; inset:0; background: repeating-linear-gradient(90deg, {bg} 0 90px, color-mix(in srgb, {bg} 88%, #000) 90px 180px); }}
 .vig {{ position:absolute; inset:0; background: radial-gradient(ellipse at 50% 40%, transparent 40%, rgba(0,0,0,.55)); }}
 .boxes {{ position:absolute; left:52px; top:60px; }}
 .b1, .b2 {{ display:table; padding:4px 22px 8px; margin-bottom:10px; box-shadow: 0 8px 18px rgba(0,0,0,.45); }}
-.b1 {{ background:#ffd21f; transform: rotate(-1.5deg); }}
+.b1 {{ background:{acc}; transform: rotate(-1.5deg); }}
 .b2 {{ background:#fff; }}
-.b1 span, .b2 span {{ font-family:Anton; color:#15301a; line-height:1.02; }}
-.hl {{ color:#d11d1d; }}
+.b1 span {{ font-family:{font}; color:{contrast_ink(acc)}; line-height:1.02; }}
+.b2 span {{ font-family:{font}; color:#111111; line-height:1.02; }}
+.hl {{ color:{_on_white(t)}; }}
 .inset {{ position:absolute; left:36px; right:36px; bottom:36px; height:760px; border:8px solid #fff; border-radius:28px; overflow:hidden;
   box-shadow: 0 18px 40px rgba(0,0,0,.6); }}
-.inset img {{ width:100%; height:100%; {_photo_style(_pos('huddle', 'topic', spec, '50% 35%'))} }}
+.inset img {{ width:100%; height:100%; {_photo_style(_pos('topic', spec, '50% 35%'))} }}
 </style></head><body><div class="card"><div class="bg"></div><div class="noise"></div><div class="vig"></div>
 <div class="boxes">{boxes}</div>{f'<div class="inset"><img src="{img}"></div>' if img else ''}
 </div><script>{FIT_JS}</script></body></html>"""
 
 
-TEMPLATES = {
-    ("culture-rush", "headline"): culture_rush_headline,
-    ("culture-rush", "casefile"): culture_rush_casefile,
-    ("culture-rush", "spotlight"): culture_rush_spotlight,
-    ("huddle", "quote"): huddle_quote,
-    ("huddle", "report"): huddle_report,
-    ("huddle", "topic"): huddle_topic,
-}
+THEMED = {"side_headline": side_headline, "spotlight": spotlight, "casefile": casefile,
+          "speaker": speaker, "report": report, "topic": topic}
 
 
 def _with_art(html_doc: str, spec: CardSpec) -> str:
@@ -525,23 +501,22 @@ def _with_art(html_doc: str, spec: CardSpec) -> str:
 
 
 def build_html(page: str, spec: CardSpec) -> str:
+    """The card's HTML: a template spec, a themed layout or a generic one, in the page's theme
+    (spec.theme). The same for every page: `page` only names it."""
     if spec.tspec is not None:      # any page: a template spec, drawn from its data
         from .tspec import build_html as spec_build
         return spec_build(spec)
-    fn = TEMPLATES.get((page, spec.template))
-    if fn is None and (spec.template in GENERIC or not any(k[0] == page for k in TEMPLATES)):
-        out = generic_build(spec, spec.theme)    # any page: the common layouts in the page's colours
+    fn = THEMED.get(spec.template)
+    if fn is None:                  # the common layouts (an unknown name: the generic headline)
+        out = generic_build(spec, spec.theme)
         return out.replace("</style>", DISTRESS_CSS + "</style>", 1) if spec.distress else out
-    if fn is None:
-        default = {"culture-rush": "headline", "huddle": "report"}.get(page, "headline")
-        fn = TEMPLATES.get((page, default), culture_rush_headline)
-    out = fn(spec)
+    out = fn(spec, theme_of(spec.theme))
     if spec.distress:
         out = out.replace("</style>", DISTRESS_CSS + "</style>", 1)
     return _with_art(out, spec) if spec.art else out
 
 
-from .layouts import GENERIC, build as generic_build  # noqa: E402
+from .layouts import GENERIC, build as generic_build, theme_of  # noqa: E402
 
 
 def _chrome_path() -> str | None:

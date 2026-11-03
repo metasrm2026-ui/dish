@@ -7,7 +7,7 @@ from bore import stills, studio
 from bore.config import Page
 from bore.media import Photo
 
-PAGE = Page.from_dict({"slug": "demo", "name": "Demo"})
+PAGE = Page.from_dict({"slug": "demo", "name": "Demo", "status": "live"})
 NOW = 1_800_000_000.0
 
 
@@ -41,6 +41,17 @@ def run_feed(monkeypatch, tmp_path, trends, old, checked=None):
     cfg = {"clustering": {"window_hours": 6}}
     (f,) = studio.prepare_feed(tmp_path, cfg, NS(page_items=lambda *a: []), dash=object(), now=NOW)
     return {s["id"]: s for s in json.loads(f.read_text())["stories"]}, calls
+
+
+def test_a_page_that_is_not_live_has_no_story_feed(monkeypatch, tmp_path):
+    t = trend("k1", ["https://x.com/a/status/1", "https://x.com/b/status/2"])
+    for status in ("paused", "draft", "going_live", "failed"):
+        monkeypatch.setattr(studio, "load_pages", lambda: [Page.from_dict({"slug": "demo", "name": "Demo", "status": status})])
+        monkeypatch.setattr(studio, "studio_meta", lambda: {"demo": {}})
+        import bore.select
+        monkeypatch.setattr(bore.select, "select_page", lambda *a, **k: NS(trends=[t], watchlist=[]))
+        assert studio.prepare_feed(tmp_path, {"clustering": {"window_hours": 6}}, NS(page_items=lambda *a: []),
+                                   dash=object(), now=NOW) == [], status
 
 
 def test_checked_empty_list_is_reused_not_replaced_by_raw_candidates(monkeypatch, tmp_path):

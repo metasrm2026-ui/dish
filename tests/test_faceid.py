@@ -328,14 +328,14 @@ def test_detector_rows_per_thread_and_old_shape(monkeypatch):
 @pytest.mark.skipif(not faceid.available(), reason="face model not present")
 def test_real_model_matches_a_face_with_itself_not_another_person():
     from PIL import Image, ImageOps
-    card = (ROOT / "docs/samples/culture-rush-taylor-travis.jpg").read_bytes()
-    fs = faceid.faces(card)
-    assert len(fs) == 2 and fs[0][0] > fs[1][0]
-    ref = fs[1][2]                                                 # the smaller face on the card
+
+    from conftest import face_photo
+    card = face_photo("one.jpg")                                   # one person's face
+    (ref,) = [f[2] for f in faceid.faces(card)]
     buf = io.BytesIO()
     ImageOps.mirror(Image.open(io.BytesIO(card)).convert("RGB")).save(buf, "JPEG", quality=90)
     assert faceid.judge(ref, faceid.faces(buf.getvalue()))[0] == "match"
-    other = faceid.faces((ROOT / "docs/samples/huddle-giants-qb-template.jpg").read_bytes())
+    other = faceid.faces(face_photo("other.jpg"))                  # another person's
     m, s = faceid.judge(ref, other)
     assert m != "match" and s < faceid.MATCH
 
@@ -357,7 +357,7 @@ def test_image_out_and_studio_rank_carry_the_face(monkeypatch):
 
 
 def test_lint_warns_when_the_chosen_face_may_be_someone_else():
-    brief = {"page": "huddle", "posts": [{"text": "Jane Example signs a deal"}], "verification": {"route": "corroborated"},
+    brief = {"page": "demo-sports", "posts": [{"text": "Jane Example signs a deal"}], "verification": {"route": "corroborated"},
              "photos": [{"size": "1600x1200", "id_match": "mismatch", "id_name": "Jane Example", "id_score": 0.04}],
              "playbook": {}}
     copy = {"niche_fit": 9, "template": "report", "headline_lines": ["JANE EXAMPLE", "SIGNS"], "photo_index": 0,

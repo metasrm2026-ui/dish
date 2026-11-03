@@ -1,6 +1,12 @@
 # SocialPilot accounts this product may post to: ONLY the account the onboarding routine linked to a
-# live page (pages/<slug>.socialpilot_login_id, ONBOARD.md step 2). Nothing is listed here by page.
-# Accounts that are never used, whatever a page record says: the owner's own pages (another
-# deployment of the engine) and personal accounts.
+# live page (pages/<slug>.socialpilot_login_id, ONBOARD.md step 2), as /api/queue gives it with each
+# draft. Nothing is listed here by page.
+timezone: Asia/Kolkata            # SocialPilot account timezone (UserInfo); preflight holds the run if it differs
+scheduling:                       # never lower than these (bore/publish.py SAFE_MINUTES): never post directly
+  min_delay_minutes: 60           # at least 1 hour after approval
+  min_gap_minutes: 45             # at least 45 minutes between two posts on the same page
+  studio_min_lead_minutes: 60     # Post Studio: the editor's time, but never sooner than this from now
+  # to post only in the audience's daytime: audience_hours: {timezone: America/New_York, start: 7, end: 23}
+# Accounts that are never used, whatever a page record says: another deployment's pages and
+# personal accounts. Refused in the plan, at the claim and in the check of what was scheduled.
 blocked_login_ids: [2662937, 2662938, 2662936]
-accounts: {}

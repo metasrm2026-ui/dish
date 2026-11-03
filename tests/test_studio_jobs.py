@@ -22,7 +22,7 @@ def test_a_summary_cut_mid_sentence_is_written_again(tmp_path):
     ideas = [{"title": "A", "template": "headline", "layout": "headline", "description": "x"},
              {"title": "B", "template": "quote", "layout": "quote", "description": "y"}]
     (d / "ideas.json").write_text(json.dumps(ideas))
-    brief = {"page": "huddle", "studio": {"summary_needed": True}}
+    brief = {"page": "demo-sports", "studio": {"summary_needed": True}}
     (d / "brief.json").write_text(json.dumps(brief))
     with pytest.raises(ValueError, match="summary"):
         S.post_result(d, "ideas")
@@ -38,11 +38,11 @@ def test_a_job_another_session_took_is_skipped(monkeypatch, capsys):
         if path.endswith("/j1"):
             raise RuntimeError("/api/routine/jobs/j1: HTTP 409 already running: another session has it")
         return {}
-    monkeypatch.setattr(S, "_get", lambda dash, path, **k: {"jobs": [{"id": "j1", "kind": "ideas", "page": "huddle", "posts": []},
-                                                                     {"id": "j2", "kind": "ideas", "page": "huddle", "posts": []}]})
+    monkeypatch.setattr(S, "_get", lambda dash, path, **k: {"jobs": [{"id": "j1", "kind": "ideas", "page": "demo-sports", "posts": []},
+                                                                     {"id": "j2", "kind": "ideas", "page": "demo-sports", "posts": []}]})
     monkeypatch.setattr(S, "_post", post)
     monkeypatch.setattr(S, "write_job", lambda job, cfg: S.WORK / job["id"])
-    monkeypatch.setattr(S, "_get", lambda dash, path, **k: {"jobs": [{"id": f"j{i}", "kind": "ideas", "page": "huddle", "posts": []}
+    monkeypatch.setattr(S, "_get", lambda dash, path, **k: {"jobs": [{"id": f"j{i}", "kind": "ideas", "page": "demo-sports", "posts": []}
                                                                      for i in (1, 2, 3)]})
     out = S.pull_jobs({}, dash=object())
     assert [p.name for p in out] == ["j2"] and "SKIP   j1" in capsys.readouterr().out   # one job per call
@@ -50,11 +50,11 @@ def test_a_job_another_session_took_is_skipped(monkeypatch, capsys):
 
 
 def test_precheck_right_after_composing(tmp_path, monkeypatch):
-    jd = tmp_path / "huddle-1-x"
+    jd = tmp_path / "demo-sports-1-x"
     d = jd / "p1"
     d.mkdir(parents=True)
-    (jd / "job.json").write_text(json.dumps({"id": "huddle-1-x", "kind": "compose", "page": "huddle"}))
-    (d / "brief.json").write_text(json.dumps({"page_name": "Huddle Room", "studio": {"caption": "old", "hashtags": []}}))
+    (jd / "job.json").write_text(json.dumps({"id": "demo-sports-1-x", "kind": "compose", "page": "demo-sports"}))
+    (d / "brief.json").write_text(json.dumps({"page_name": "Demo Sports", "studio": {"caption": "old", "hashtags": []}}))
     (d / "copy.json").write_text(json.dumps({"caption": "McCarthy is in the QB room.\n\n#Giants #NFL"}))
     Image.new("RGB", (1080, 1350)).save(d / "card.jpg")
     S.precheck(jd)
@@ -66,7 +66,7 @@ def test_precheck_right_after_composing(tmp_path, monkeypatch):
     S.precheck(jd, send=True, dash=object())
     (path, body), = sent
     r = body["posts"]["p1"]
-    assert path == "jobs/huddle-1-x" and body["precheck"] and "status" not in body
+    assert path == "jobs/demo-sports-1-x" and body["precheck"] and "status" not in body
     assert set(r["check"]) == {"factual", "timing", "grammar", "other", "guidelines"}   # the dashboard knows what it checked
     assert r["checked_caption"] == "McCarthy is in the QB room.\n#Giants #NFL"          # and which text it was
 
@@ -74,7 +74,7 @@ def test_precheck_right_after_composing(tmp_path, monkeypatch):
 def test_jobs_this_machine_cannot_do_are_left_and_a_job_it_could_not_prepare_goes_back(monkeypatch, capsys):
     from bore import deps
     posted = []
-    jobs = [{"id": "j1", "kind": "compose", "page": "huddle", "posts": []}, {"id": "j2", "kind": "ideas", "page": "huddle", "posts": []}]
+    jobs = [{"id": "j1", "kind": "compose", "page": "demo-sports", "posts": []}, {"id": "j2", "kind": "ideas", "page": "demo-sports", "posts": []}]
     monkeypatch.setattr(S, "_get", lambda dash, path, **k: {"jobs": jobs})
     answer = {"status": "queued"}
     monkeypatch.setattr(S, "_post", lambda dash, path, body: posted.append((path, body)) or answer)
@@ -198,7 +198,7 @@ def test_a_check_says_which_caption_it_reviewed(tmp_path):
     reviewer read it: it needs the exact text the reviewer was given."""
     d = tmp_path / "p1"
     d.mkdir()
-    brief = {"page_name": "Huddle Room", "studio": {"caption": "  Line one.\n\nLine two --- with dashes\n---\nand a rule  ",
+    brief = {"page_name": "Demo Sports", "studio": {"caption": "  Line one.\n\nLine two --- with dashes\n---\nand a rule  ",
                                                     "hashtags": ["#A", "#B"]}}
     (d / "review_request.md").write_text(S.review_request(d, brief))
     (d / "check.json").write_text(json.dumps({k: [] for k in ("factual", "timing", "grammar", "other", "guidelines")}))
@@ -239,12 +239,12 @@ def test_a_card_says_which_photo_it_was_built_on(tmp_path):
 def test_the_precheck_reviews_the_caption_that_will_be_posted(tmp_path):
     """A visual made again keeps the caption the editor wrote (the new one is only offered): the
     automatic check reviews theirs, not the one just composed."""
-    jd = tmp_path / "huddle-2-x"
+    jd = tmp_path / "demo-sports-2-x"
     _composed(jd / "p1", {"caption": "The routine's new caption."},
-              {"page_name": "Huddle Room", "studio": {"caption": "The editor's own words.", "hashtags": ["#Mine"], "caption_kept": True}})
+              {"page_name": "Demo Sports", "studio": {"caption": "The editor's own words.", "hashtags": ["#Mine"], "caption_kept": True}})
     _composed(jd / "p2", {"caption": "The routine's new caption."},
-              {"page_name": "Huddle Room", "studio": {"caption": "", "hashtags": [], "caption_kept": False}})
-    (jd / "job.json").write_text(json.dumps({"id": "huddle-2-x", "kind": "compose", "page": "huddle"}))
+              {"page_name": "Demo Sports", "studio": {"caption": "", "hashtags": [], "caption_kept": False}})
+    (jd / "job.json").write_text(json.dumps({"id": "demo-sports-2-x", "kind": "compose", "page": "demo-sports"}))
     S.precheck(jd)
     assert S._checked_caption(jd / "p1" / "review_request.md") == "The editor's own words.\n#Mine"
     assert S._checked_caption(jd / "p2" / "review_request.md") == "The routine's new caption."
@@ -257,7 +257,7 @@ def test_write_job_says_when_the_editor_wrote_the_caption(monkeypatch, tmp_path)
     monkeypatch.setattr(S, "_page_templates", lambda page: [])
     monkeypatch.setattr(R, "load_playbook", lambda page: {})
     story = {"headline": "H", "summary": "S.", "sources": []}
-    job = {"id": "j9", "kind": "images", "page": "huddle", "batch_id": "b",
+    job = {"id": "j9", "kind": "images", "page": "demo-sports", "batch_id": "b",
            "posts": [{"id": "p1", "story": story, "caption": "Mine", "caption_edited_at": 1}, {"id": "p2", "story": story}]}
     jd = S.write_job(job, {})
     kept = [json.loads((jd / p / "brief.json").read_text())["studio"]["caption_kept"] for p in ("p1", "p2")]
@@ -277,10 +277,10 @@ def test_the_checked_caption_is_the_text_the_dashboard_posts(tmp_path):
              {"caption": "No tags at all."},
              {"caption": "", "hashtags": ["#OnlyTags"]},
              {"caption": "Too many tags.", "hashtags": [f"#t{i}" for i in range(35)] + ["", "#" + "x" * 70]}]
-    jd = tmp_path / "huddle-3-x"
+    jd = tmp_path / "demo-sports-3-x"
     for i, copy in enumerate(cases):
-        _composed(jd / f"p{i}", copy, {"page_name": "Huddle Room", "studio": {"caption": "", "hashtags": []}})
-    (jd / "job.json").write_text(json.dumps({"id": "huddle-3-x", "kind": "compose", "page": "huddle"}))
+        _composed(jd / f"p{i}", copy, {"page_name": "Demo Sports", "studio": {"caption": "", "hashtags": []}})
+    (jd / "job.json").write_text(json.dumps({"id": "demo-sports-3-x", "kind": "compose", "page": "demo-sports"}))
     S.precheck(jd)
     for i, copy in enumerate(cases):
         cap, tags = S._split_caption(copy)              # what post_result sends with the card

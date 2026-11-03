@@ -30,7 +30,7 @@ def fake_http(monkeypatch):
 
 
 def _request(with_brief=True):
-    req = {"id": "culture-rush-202609271637-scarlett-colin", "page": "culture-rush", "page_name": "Culture Rush",
+    req = {"id": "demo-celeb-202609271637-scarlett-colin", "page": "demo-celeb", "page_name": "Demo Celeb",
            "caption": "SCARLETT & COLIN ARE BACK\n\nFirst joint red carpet in more than a year.",
            "headline": "SCARLETT & COLIN RED CARPET RETURN", "sources": ["https://eonline.com/a"],
            "verification": {"route": "corroborated", "sources": ["x:enews", "x:variety"]},
@@ -50,8 +50,8 @@ def test_regen_brief_carries_story_feedback_and_images(tmp_path, cfg):
     d = R.write_regen_brief(tmp_path, _request(), cfg)
     b = json.loads((d / "brief.json").read_text())
     rg = b["regeneration"]
-    assert rg["replaces"] == "culture-rush-202609271637-scarlett-colin" and not rg["legacy_sources"]
-    assert b["id"].startswith("culture-rush-") and b["id"].endswith("-scarlett-colin-v2") and b["id"] != rg["replaces"]
+    assert rg["replaces"] == "demo-celeb-202609271637-scarlett-colin" and not rg["legacy_sources"]
+    assert b["id"].startswith("demo-celeb-") and b["id"].endswith("-scarlett-colin-v2") and b["id"] != rg["replaces"]
     assert rg["feedback"].startswith("Make the photo bigger")
     assert b["photos"][rg["reference_photo_index"]]["source"] == "reviewer upload"
     assert len(b["photos"]) == 2                    # source photo deduplicated with the snapshot
@@ -98,7 +98,7 @@ def test_payload_links_old_draft_and_keeps_brief(tmp_path, cfg):
                                              "changes": "Bigger photo, removed the frame"}))
     (d / "card.jpg").write_bytes(_jpeg(1080, 1350))
     p = R.draft_payload(d)
-    assert p["replaces"] == "culture-rush-202609271637-scarlett-colin"
+    assert p["replaces"] == "demo-celeb-202609271637-scarlett-colin"
     assert p["feedback_applied"].startswith("Make the photo bigger") and p["changes"].startswith("Bigger")
     assert p["previous_image_url"] == "https://x/card.jpg"
     assert p["brief"]["posts"] and "caption" not in p["copy"]

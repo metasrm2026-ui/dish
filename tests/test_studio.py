@@ -28,10 +28,23 @@ def test_sources_round_trip_and_disable():
     assert "new" in p.subreddits and "site:example.com/sport" in p.web_searches and "demo injuries" in p.web_searches
 
 
-def test_new_admin_page_without_pipeline_is_studio_only():
+def test_a_new_page_runs_hourly_only_once_it_is_live():
+    """Every live page gets the hourly posts (docs/PRODUCT.md); a record without a status is a draft,
+    which never runs."""
     p = page_from_config({"slug": "n", "name": "N", "sources": [{"url": "https://x.com/SomeOne", "type": "social"}]})
-    assert p.x_handles == ["someone"] and p.hourly is False
+    assert p.x_handles == ["someone"] and p.hourly is True and p.status == "draft" and not p.live
     assert classify({"url": "https://www.instagram.com/x", "type": "social"})[0] == "other"
+
+
+def test_the_page_records_status_budgets_and_account_come_from_the_record_alone():
+    rec = {"slug": "n", "name": "N", "workspace": "ws1", "status": "Live", "posts_per_day": 4, "premium_per_day": 2,
+           "socialpilot_login_id": 9100007, "pipeline": {"status": "paused", "posts_per_day": 50,
+                                                         "socialpilot_login_id": "1", "premium_per_day": 99}}
+    p = page_from_config(rec)
+    assert (p.workspace, p.status, p.live, p.posts_per_day, p.premium_per_day, p.socialpilot_login_id) == \
+        ("ws1", "live", True, 4, 2, "9100007")
+    q = page_from_config({"slug": "m", "name": "M", "pipeline": {"status": "live", "socialpilot_login_id": "1"}})
+    assert q.status == "draft" and q.socialpilot_login_id == "" and (q.posts_per_day, q.premium_per_day) == (10, 6)
 
 
 def test_ideas_need_two_with_a_drawable_layout():

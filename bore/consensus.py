@@ -1,7 +1,7 @@
 """The image other outlets used for a story.
 
-Culture Rush's single source often leads with a stock or file photo (a generic tiger for the tiger
-attack) while every other outlet used the same still of the event. This finds that picture for
+A celebrity page's single source often leads with a stock or file photo (a generic animal for an
+animal attack) while every other outlet used the same still of the event. This finds that picture for
 free: news search (Bing News RSS + DuckDuckGo news) for the story -> each article's lead image ->
 same-picture groups (perceptual hashes on border-trimmed centre crops, then ORB + RANSAC with a
 patch check for crops, overlays and watermarks) -> groups ranked by distinct outlets (syndicated

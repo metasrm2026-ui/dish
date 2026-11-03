@@ -1,6 +1,6 @@
-# Global system configuration. Page-specific data lives in config/pages.yaml
-# (generated from the source workbook by `bore import-workbook`).
-# Credentials are read from .env (gitignored), never from this file.
+# Global system configuration. No page is configured here: pages (their sources, playbooks,
+# status and budgets) come only from the dashboard, pulled by `python -m bore.cli studio sync`
+# into private/ (gitignored). Credentials are read from .env (gitignored), never from this file.
 
 db_path: data/bore.db
 output_dir: output
@@ -9,9 +9,9 @@ default_timezone: America/New_York
 # ---------------------------------------------------------------- collection
 # ---------------------------------------------------------------- hourly routine
 # `bore hourly` runs every hour. Total Apify spend (X + Reddit + web) is capped at
-# monthly_usd (below the $19 plan ceiling and the $20 target); see bore/budget.py.
+# monthly_usd: this product's own Apify budget (the owner sets it); see bore/budget.py.
 budget:
-  monthly_usd: 16.0
+  monthly_usd: 5.0
 schedule:                          # optional sources run when due AND the pacer allows
   reddit_every_hours: 6
   web_every_hours: 6
@@ -22,17 +22,12 @@ schedule:                          # optional sources run when due AND the pacer
   escalation_queries: 5
   default_cost_usd: {x: 0.01, x2: 0.012, reddit: 0.06, web: 0.035, refresh: 0.02, escalation: 0.02}
 posting:
-  daily_cap: 20                    # posts per page per day (page-local day)
+  daily_cap: 20                    # the most posts_per_day any page may have (each page record sets its own, default 10; page-local day)
   active_hours: [7, 23]            # page-local hours in which picks are proposed
   max_picks_per_run: 3            # 20 posts over 16 active hours, with room to catch up after skips
 
-# Budget plan for $16/month total (~$0.53/day; guard also stops at 85% of the $19 ceiling):
-#   X primary (42 handles) $0.00015/tweet hourly    ~$0.16/day
-#   X secondary: 1 batch of ~25 handles every 3h, <=80 tweets     <=$0.10/day
-#   Reddit $0.00139/post: 5 core + 2 rotating subs x 6 posts, every 6h  ~$0.23/day
-#   Google $0.0035/query: 4/page + 3 rotating site: searches every 6h ~$0.15/day
-#   refresh + escalation ~$0.05/day. That is slightly over the daily share at full volume, so the
-#   pacer skips optional passes (x2, reddit, web, refresh) when a day runs hot; X primary always runs.
+# The pacer spreads the month's budget over its days: it skips optional passes (x2, reddit, web,
+# refresh) when a day runs hot; X primary always runs, and nothing past the monthly budget.
 collection:
   default_window_hours: 1          # normal hourly window
   overlap_minutes: 10              # re-cover the tail of the last window
@@ -178,9 +173,8 @@ fanpagekarma:
 
 # ------------------------------------------------------------- clustering
 clustering:
-  join_threshold: 0.60             # tightest value passing BOTH fixtures (range 0.40-0.60 on
-                                   # 2026-09-26): the synthetic failure-mode set and a real
-                                   # hand-labelled Culture Rush window. Re-tune: `bore tune tests/fixtures/*.json`
+  join_threshold: 0.60             # tightest value passing the synthetic failure-mode set
+                                   # (range 0.40-0.60). Re-tune: `bore tune tests/data/regression.json`
   entity_boost: 3.0                # names (proper nouns) weigh 3x: they identify a story, templates don't
   avg_sim_ratio: 0.55              # average similarity to whole cluster >= ratio * join threshold
   min_shared_tokens: 2
@@ -256,20 +250,16 @@ claude:
 
 krea:
   base_url: https://api.krea.ai
-  # Art mode (default): Krea 2 Turbo paints each card's artwork (page-style backdrop, team colours,
-  # story mood; never people or text), and the renderer lays the real photo, logo and exact text
-  # on top. ~15 credits per image (K2 Turbo $0.015 API price; the plan's 20,000 credits = 257 Nano
-  # Banana 2 at $0.08, so ~1 credit per $0.001). 20 posts x 2 pages x 30 days = 1,200 images +
-  # retries fits the plan's 20,000 monthly credits. Faces are always the real photo's pixels and
-  # card text is always exact, so the old Krea failure modes (invented numbers, altered faces,
-  # repeated lines) cannot happen.
+  # mode: art = Krea 2 Turbo paints each card's artwork (a backdrop in the page's colours and the
+  # story's mood; never people or text), and the renderer lays the real photo, logo and exact text
+  # on top (~15 credits an image). Faces are always the real photo's pixels and card text is
+  # always exact.
   # mode: full = the image model composes the whole card from the photo (nano-banana-flash-lite,
-  # ~33 credits; only ~600 a month fit).
-  # mode: premium (owner, Nov 1: GPT-level cards, accepting that the model redraws the photo): the
-  # image model makes the whole card from the real photo, in the layout of the page's own card (the
-  # template renderer's card with the exact text, sent as a second image), with a "Photo: <source>"
-  # credit. verify reads every line back, the face must match the chosen photo's, and a card that
-  # fails twice falls back to the template renderer. Nano Banana 2.1: ~22 credits a card.
+  # ~33 credits).
+  # mode: premium = the image model makes the whole card from the real photo, in the layout of the
+  # page's own card (the template renderer's card with the exact text, sent as a second image), with
+  # a "Photo: <source>" credit. verify reads every line back, the face must match the chosen photo's,
+  # and a card that fails twice falls back to the template renderer. Nano Banana 2.1: ~22 credits a card.
   mode: premium
   premium:
     model: google/nano-banana-2.1
@@ -277,12 +267,13 @@ krea:
   model: krea/krea-2/medium-turbo
   art_input: {aspect_ratio: "4:5", resolution: "1K", creativity: "low"}   # low: richer texture detail
   aspect_ratio: "4:5"
-  monthly_credits: 20000
+  monthly_credits: 3300
   credits_per_image: 22
-  # shared by the hourly routine and Post Studio, within the plan's 20,000 credits (owner, Oct 23 and
-  # Nov 1): 860 premium cards x ~22 credits = ~18,900 credits (~28 a day: the hourly posts and Studio)
-  monthly_max_images: 860
-  monthly_max_usd: 20.0
+  # premium cards a month, the whole product (shared with nothing else; the owner sets it): 150 x ~22
+  # credits = ~3,300 credits. Checked in the dashboard (POST /api/routine/krea), together with each
+  # page's own premium_per_day (its page record). Past either: the safe card (template renderer).
+  monthly_max_images: 150
+  monthly_max_usd: 3.5
   prices_usd:                      # API price per image (krea.ai/app/api/pricing, 2026-09-29)
     krea/krea-2/medium-turbo: 0.015
     google/nano-banana-2.1: 0.022

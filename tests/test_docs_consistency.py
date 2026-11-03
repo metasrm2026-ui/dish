@@ -19,7 +19,7 @@ def test_audience_hours_are_described_only_when_they_are_set():
 
 
 def test_the_headshot_rule_sends_the_session_only_where_the_renderer_can_place_it():
-    """A tight headshot (ESPN-style 600x436, the face 34% x 60% of it) is BLOCKED in Huddle's report
+    """A tight headshot (ESPN-style 600x436, the face 34% x 60% of it) is BLOCKED in Demo Sports's report
     and quote alike: quote's clear area is no bigger and the photo is scaled by its height in both.
     So the docs may name a template as the way round a BLOCKED headshot only if the renderer
     actually keeps the face clear in it (the Oct 21 wording sent the session to quote)."""
@@ -32,7 +32,7 @@ def test_the_headshot_rule_sends_the_session_only_where_the_renderer_can_place_i
     buf = io.BytesIO()
     Image.new("RGB", (600, 436), "grey").save(buf, "JPEG")
     clear = {tpl for tpl in ("report", "quote") for focus in (None, (0.5, 0.42))
-             if not plan_layout("huddle", CardSpec(template=tpl, headline_lines=["X"], photos=[buf.getvalue()],
+             if not plan_layout("demo-sports", CardSpec(template=tpl, headline_lines=["X"], photos=[buf.getvalue()],
                                                    face_box=(0.33, 0.12, 0.34, 0.6), focus=focus, face_size=0.6))}
     rule = ROUTINE[ROUTINE.index("The official NFL headshot"):ROUTINE.index("For injury or trade news")]
     named = set(re.findall(r"(?:use it|switch) (?:in|to) `(\w+)`", rule))

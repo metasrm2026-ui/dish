@@ -1,7 +1,7 @@
 """Template specs (bore/tspec.py, docs/TEMPLATE_SPEC.md): a post template as data that the card
 renderer draws, lint checks and verify reads back, so a page's new template needs no code (Oct 23:
 editors' new templates were only ever text for the ideas step; the card fell back to the nearest
-coded layout). Every spec here is made up (tests/fixtures/tspec/)."""
+coded layout). Every spec here is made up (tests/data/tspec/)."""
 import io
 import json
 import re
@@ -15,7 +15,7 @@ from bore.cards import FaceBlocked, TextOverflow, render
 from bore.guard import brand_words, card_strings, lint, verify
 
 ROOT = Path(__file__).resolve().parent.parent
-FIX = Path(__file__).parent / "fixtures" / "tspec"
+FIX = Path(__file__).parent / "data" / "tspec"
 SPECS = sorted(FIX.glob("*.json"))
 THEME = {"accent": "#ffcc00", "bg": "#101a2c", "ink": "#ffffff", "logo_text": "Demo Page"}
 FACE = (0.42, 0.12, 0.16, 0.14)          # high in the frame: where a headline over the photo would sit
@@ -351,7 +351,10 @@ def test_an_hourly_spec_cards_logo_is_the_pages_own_text(monkeypatch):
             ("THE COACH", 0.98, box), ("DEMOPAGE", 0.97, box)]
     res = verify("card.jpg", brief, copy, ocr=lambda p: read)
     assert res["pass"] and not res["warnings"], res
-    assert "DEMO" not in brand_words(brief, {"template": "headline"}), "a coded card draws no theme logo there"
+    # every layout is drawn in the page's theme, its logo text too (bore/cards.py, bore/layouts.py)
+    assert {"DEMO", "PAGE"} <= brand_words(brief, {"template": "headline"})
+    monkeypatch.setattr(studio, "studio_meta", lambda: {})
+    assert not brand_words(brief, {"template": "headline"}), "a page with no theme draws no logo"
 
 
 def test_a_logo_of_several_words_reads_as_the_pages_own_on_any_card():
@@ -445,10 +448,13 @@ def test_a_credit_under_a_photos_border_or_rounded_corner_moves_the_photo_or_is_
 
 
 def _big_closeup() -> bytes:
-    """A real face (docs/samples) in a 4050 px photo: the detector misses it at that size, verify
+    """A real face (tests/data/faces) in a 4050 px photo: the detector misses it at that size, verify
     finds it on the card."""
     import cv2
-    im = cv2.imread(str(ROOT / "docs/samples/huddle-giants-qb-template.jpg"))
+    import numpy as np
+
+    from conftest import face_photo
+    im = cv2.imdecode(np.frombuffer(face_photo("closeup.jpg"), np.uint8), cv2.IMREAD_COLOR)   # 1350 px, face ~40% down
     return cv2.imencode(".jpg", cv2.resize(im, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC))[1].tobytes()
 
 
@@ -500,10 +506,29 @@ def _spec_dir(d, fid, slots, photo=None):
     return brief, copy
 
 
+def _busy_photo(w: int = 1500, h: int = 1875) -> bytes:
+    """A made-up photo with a real photo's clutter (stadium-like colour blocks, light and dark
+    patches, grain): what a figure or a plate is drawn over."""
+    import numpy as np
+    from PIL import Image, ImageDraw
+    rng = np.random.default_rng(7)
+    y, x = np.mgrid[0:h, 0:w]
+    base = np.stack([60 + 80 * x / w, 70 + 60 * y / h, 110 - 50 * x / w], -1)
+    im = Image.fromarray(np.clip(base + rng.normal(0, 14, (h, w, 3)), 0, 255).astype("uint8"))
+    dr = ImageDraw.Draw(im)
+    for _ in range(60):
+        x0, y0 = int(rng.integers(0, w)), int(rng.integers(0, h))
+        dr.rectangle([x0, y0, x0 + int(rng.integers(20, 300)), y0 + int(rng.integers(20, 300))],
+                     fill=tuple(int(c) for c in rng.integers(0, 255, 3)))
+    b = io.BytesIO()
+    im.save(b, "JPEG", quality=90)
+    return b.getvalue()
+
+
 def test_a_lone_digit_on_a_plate_or_as_the_giant_figure_is_read_where_it_is_drawn(tmp_path):
     """OCR of the whole card dropped a lone '1' (and read '2' as '7'): a correct card failed verify, and
     a '1' anywhere else on the card (SAMPLE PHOTO 1) could stand in for a missing one."""
-    real = (ROOT / "docs/samples/huddle-giants-qb-template.jpg").read_bytes()
+    real = _busy_photo()
     plates = [{"value": "1", "label": "SACKS"}, {"value": "7", "label": "TACKLES"}]
     cases = (("mega-figure", {"headline": ["MOST POINTS", "IN ONE NIGHT"], "figure": "1"}, real),
              ("tally-tower", {"verdict": "BIG NIGHT", "stats": plates}, real),

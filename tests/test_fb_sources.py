@@ -44,9 +44,8 @@ def test_sources_assumed_from_post_history():
     detected = detect(msgs, catalog)
     assert choose_leagues(detected) == ["nfl"]
     page = assign(Page(slug="p", name="P"), detected, catalog)
-    assert "adamschefter" in page.tier_one and "nfl" in page.officials
-    assert "nfl" in page.x_handles and "adamschefter" in page.x_handles
-    assert "nfl" in page.subreddits
+    # the catalog names no account or subreddit: those are researched for each page (onboarding)
+    assert page.tier_one == [] and page.officials == [] and page.subreddits == []
     assert "Eagles news today" in page.web_searches
     assert page.sources_origin.startswith("assumed")
     assert not set(page.tier_one) & set(page.officials)

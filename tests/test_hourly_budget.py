@@ -35,7 +35,7 @@ def _at(hour):
 
 
 def test_page_quota_paces_to_daily_cap(cfg, store):
-    page = Page.from_dict({"slug": "p", "name": "P", "timezone": "America/New_York"})
+    page = Page.from_dict({"slug": "p", "name": "P", "timezone": "America/New_York", "posts_per_day": 20})
     assert page_quota(page, store, cfg, _at(3)) == 0             # quiet hours
     assert page_quota(page, store, cfg, _at(9)) == 2             # 20 over 14 hours left
     assert page_quota(page, store, cfg, _at(20)) == 3            # behind: catch up, max 3
@@ -51,7 +51,7 @@ def test_page_quota_paces_to_daily_cap(cfg, store):
 
 def test_exclude_terms_and_contentless_picks(cfg):
     now = time.time()
-    page = Page.from_dict({"slug": "h", "name": "Huddle", "exclude_terms": ["high school"]})
+    page = Page.from_dict({"slug": "h", "name": "Demo Sports", "exclude_terms": ["high school"]})
     items = [
         {"id": "a", "platform": "web", "author": "ktal.com", "created_at": now - 600,
          "title": "Week 5: Texas high school football scores & highlights"},
@@ -98,7 +98,7 @@ def test_photo_retries_count_per_story_even_when_its_key_drifts(cfg, store, monk
 
 
 def test_website_only_pages_keep_the_days_unbriefed_articles(cfg):
-    """Culture Rush (one website's feed) ran out of candidates by evening on Oct 12 while articles
+    """Demo Celeb (one website's feed) ran out of candidates by evening on Oct 12 while articles
     from that morning had aged out of the 12-hour window unbriefed."""
     from bore.select import website_only, window_hours
     now = time.time()
@@ -118,7 +118,7 @@ def test_website_only_pages_keep_the_days_unbriefed_articles(cfg):
 
 def test_a_reason_only_about_the_photo_counts_as_a_photo_skip(cfg, store, monkeypatch, tmp_path):
     """No story was ever retried for its photo (Oct 9-13): the routine wrote "no sharp photo of X"
-    about 14 times a day on Huddle but never passed --photo."""
+    about 14 times a day on Demo Sports but never passed --photo."""
     import json
     from argparse import Namespace
     from bore import cli, routine as R
@@ -159,3 +159,37 @@ def test_a_reason_only_about_the_photo_counts_as_a_photo_skip(cfg, store, monkey
     cli._routine_skip(Namespace(dir=str(d3), reason="No usable photo of Jake Example", photo=True), cfg, R)
     assert store.get_kv("photo_retry:p:k3") == 1
     assert {r["key"]: r["headline"] for r in store.sent_for_page("p", 0)}["k3"].startswith("[photo-skip]")
+
+
+# ------------------------------------------------------------------ only live pages run
+def _statuses():
+    return [Page.from_dict({"slug": s, "name": s, "status": s}) for s in ("live", "paused", "draft", "going_live", "failed")]
+
+
+def test_only_live_pages_run_unless_a_page_going_live_is_named(monkeypatch):
+    """The hourly run, its collection and the refresh work on live pages only. A page going live runs
+    when it is named (the onboarding routine's first run); a paused one never does."""
+    from types import SimpleNamespace as NS
+
+    import pytest
+
+    from bore import cli
+    monkeypatch.setattr(cli, "load_pages", _statuses)
+    assert [p.slug for p in cli._pages(NS(page=None), {}, running=True)] == ["live"]
+    assert len(cli._pages(NS(page=None), {})) == 5                       # listing and settings see them all
+    assert [p.slug for p in cli._pages(NS(page="going_live"), {}, running=True)] == ["going_live"]
+    for slug in ("paused", "draft", "failed"):
+        with pytest.raises(SystemExit, match=f"page {slug} is {slug}, not live: it does not run"):
+            cli._pages(NS(page=slug), {}, running=True)
+
+
+def test_with_no_live_page_the_hourly_run_collects_nothing(monkeypatch, cfg, store, capsys):
+    from types import SimpleNamespace as NS
+
+    from bore import cli
+    monkeypatch.setattr(cli, "load_pages", lambda: [p for p in _statuses() if p.slug != "live"])
+    monkeypatch.setattr(cli, "_store", lambda c: store)
+    monkeypatch.setattr(cli, "_apify", lambda *a: (_ for _ in ()).throw(AssertionError("Apify was asked")))
+    _, apify, pacer, results, log, _ = cli._hourly_select(NS(page=None), cfg)
+    assert apify is None and results == [] and "nothing collected" in pacer.summary()
+    assert "not running for 4 page(s) that are not live: draft, failed, going_live, paused" in capsys.readouterr().out

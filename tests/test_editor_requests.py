@@ -32,13 +32,13 @@ def _check(run):
 
 
 def test_an_open_link_or_regeneration_stops_the_check_whatever_the_quota(tmp_path, capsys):
-    run = _run(tmp_path, {"culture-rush": 0, "huddle": 1})
-    link = _brief(run / "culture-rush-link-x", "culture-rush", link={"request_id": "r1", "url": "https://x.com/a/status/1"})
-    regen = _brief(run / "huddle-regen-y", "huddle", regeneration={"replaces": "huddle-old"})
-    (_brief(run / "huddle-pick-z", "huddle") / "uploaded").write_text("{}")
+    run = _run(tmp_path, {"demo-celeb": 0, "demo-sports": 1})
+    link = _brief(run / "demo-celeb-link-x", "demo-celeb", link={"request_id": "r1", "url": "https://x.com/a/status/1"})
+    regen = _brief(run / "demo-sports-regen-y", "demo-sports", regeneration={"replaces": "demo-sports-old"})
+    (_brief(run / "demo-sports-pick-z", "demo-sports") / "uploaded").write_text("{}")
     with pytest.raises(SystemExit, match="NOT DONE") as e:
         _check(run)
-    assert "culture-rush-link-x" in str(e.value) and "huddle-regen-y" in str(e.value)
+    assert "demo-celeb-link-x" in str(e.value) and "demo-sports-regen-y" in str(e.value)
     (link / "uploaded").write_text("{}")                       # made
     (regen / cli.REQUEST_FAILED).write_text("{}")             # reported back to the reviewer
     _check(run)
@@ -47,7 +47,7 @@ def test_an_open_link_or_regeneration_stops_the_check_whatever_the_quota(tmp_pat
 
 
 def test_skip_refuses_an_editors_request(tmp_path, cfg):
-    d = _brief(tmp_path / "culture-rush-link-x", "culture-rush", link={"request_id": "r1", "url": "https://x.com/a/status/1"})
+    d = _brief(tmp_path / "demo-celeb-link-x", "demo-celeb", link={"request_id": "r1", "url": "https://x.com/a/status/1"})
     with pytest.raises(SystemExit, match="REFUSED.*link-fail"):
         cli._routine_skip(types.SimpleNamespace(dir=str(d), reason="off-niche", photo=False), cfg, None)
     assert not (d / "skip.json").exists()
@@ -55,7 +55,7 @@ def test_skip_refuses_an_editors_request(tmp_path, cfg):
 
 def test_a_decision_skip_in_copy_is_refused_for_an_editors_request(tmp_path, cfg, monkeypatch):
     from bore import routine as R
-    d = _brief(tmp_path / "huddle-regen-y", "huddle", regeneration={"replaces": "huddle-old"})
+    d = _brief(tmp_path / "demo-sports-regen-y", "demo-sports", regeneration={"replaces": "demo-sports-old"})
     (d / "copy.json").write_text(json.dumps({"decision": "skip", "reason": "weak story"}))
     monkeypatch.setattr(R, "load_playbook", lambda slug: {})
     with pytest.raises(SystemExit, match="REFUSED"):
@@ -64,19 +64,19 @@ def test_a_decision_skip_in_copy_is_refused_for_an_editors_request(tmp_path, cfg
 
 
 def test_link_fail_tells_the_editor_and_leaves_a_marker(tmp_path, cfg, monkeypatch):
-    d = _brief(tmp_path / "culture-rush-link-x", "culture-rush", link={"request_id": "r1", "url": "https://x.com/a/status/1"})
+    d = _brief(tmp_path / "demo-celeb-link-x", "demo-celeb", link={"request_id": "r1", "url": "https://x.com/a/status/1"})
     told = []
     monkeypatch.setattr(cli, "_dashboard", lambda: types.SimpleNamespace(link_failed=lambda rid, why: told.append((rid, why)) or {"ok": True}))
     cli._routine_link_fail(types.SimpleNamespace(dir=str(d), reason="the page cannot be read"), cfg, None)
     assert told == [("r1", "the page cannot be read")] and json.loads((d / cli.REQUEST_FAILED).read_text())["reason"]
 
 
-def _prepare_env(tmp_path, cfg, store, monkeypatch):
+def _prepare_env(tmp_path, cfg, store, monkeypatch, status="live"):
     """prepare with one link and one regeneration waiting, no Apify token, a dashboard stub."""
     import bore.config
     import bore.linkpost
     from bore import routine as R
-    page = Page.from_dict({"slug": "demo", "name": "Demo", "hourly": True})
+    page = Page.from_dict({"slug": "demo", "name": "Demo", "hourly": True, "status": status})
     monkeypatch.delenv("APIFY_TOKEN", raising=False)
     monkeypatch.setattr(bore.config, "load_env", lambda *a, **k: None)
     monkeypatch.setattr(cli, "load_pages", lambda *a: [page])
@@ -96,7 +96,7 @@ def _prepare_env(tmp_path, cfg, store, monkeypatch):
     monkeypatch.setattr(R, "write_regen_brief", regen_brief)
     dash = types.SimpleNamespace(
         created_today=lambda c: {}, recent_drafts=lambda h: [], editor_feedback=lambda days, cap=12: {},
-        regen_requests=lambda: [{"id": "demo-old"}],
+        regen_requests=lambda: [{"id": "demo-old", "page": "demo"}],
         link_requests=lambda: [{"id": "r1", "page": "demo", "url": "https://news.example.org/a"}])
     monkeypatch.setattr(cli, "_dashboard", lambda: dash)
     return types.SimpleNamespace(no_collect=False, page=None, fresh=True), R
@@ -117,6 +117,14 @@ def test_prepare_without_an_apify_token_still_writes_the_editors_briefs(tmp_path
     run, briefs = _briefs(tmp_path)
     assert len(briefs) == 2 and "demo-regen-demo-old" in briefs and any("-link-" in b for b in briefs)
     assert json.loads((run / "run.json").read_text())["links"] == ["r1"]
+
+
+def test_a_paused_pages_requests_wait_until_it_is_live(tmp_path, cfg, store, monkeypatch, capsys):
+    args, R = _prepare_env(tmp_path, cfg, store, monkeypatch, status="paused")
+    cli._routine_prepare(args, cfg, R)
+    out = capsys.readouterr().out
+    assert _briefs(tmp_path)[1] == []                              # nothing is made for a paused page
+    assert "WAITS  demo-old: page demo is not live" in out and "WAITS  r1: page demo is not live" in out
 
 
 def test_prepare_reports_the_hourly_ledger_to_the_shared_krea_count(tmp_path, cfg, store, monkeypatch, capsys):
@@ -168,7 +176,7 @@ def test_a_rejected_apify_token_skips_collection_but_a_bug_is_not_hidden(tmp_pat
 
 def _lint(size, source):
     from bore.guard import lint
-    brief = {"id": "culture-rush-link-x", "page": "culture-rush", "posts": [{"platform": "web", "text": "A story."}],
+    brief = {"id": "demo-celeb-link-x", "page": "demo-celeb", "posts": [{"platform": "web", "text": "A story."}],
              "photos": [{"index": 0, "file": "photos/0.jpg", "size": size, "source": source}],
              "link": {"request_id": "r1", "url": "https://news.example.org/a"}}
     copy = {"headline_lines": ["A STORY"], "caption": "A story.", "photo_index": 0, "template": "headline"}
@@ -185,7 +193,7 @@ def test_a_links_own_article_image_only_warns():
 
 def test_an_x_link_brings_its_photos(monkeypatch):
     from bore import linkpost
-    post = json.loads((FIXTURES / "x_syndication_20261021.json").read_text())
+    post = json.loads((FIXTURES / "x_syndication.json").read_text())
     calls = []
 
     class R:

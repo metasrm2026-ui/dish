@@ -29,7 +29,7 @@ console.log(JSON.stringify(calls));
 """
 
 REASON = {"code": "hourly_stale", "level": "red", "text": "No hourly post run seen for 3h: SecretSourceXYZ", "since": 1792600000000,
-          "ids": ["huddle-202610211405-a-story"]}
+          "ids": ["demo-sports-202610211405-a-story"]}
 
 
 def _run(tmp_path, health=None, watchdog=None, issues=(), secret="the-secret", status=200):
@@ -61,7 +61,7 @@ def test_red_opens_one_issue_with_codes_and_ids_only(tmp_path):
     assert all(c[3] for c in calls if c[0] == "fetch"), "the routine secret goes in the header"
     create = [c[1] for c in calls if c[0] == "create"]
     assert len(create) == 1 and create[0]["title"] == "Bore health: RED"
-    assert "`hourly_stale`" in create[0]["body"] and "`huddle-202610211405-a-story`" in create[0]["body"]
+    assert "`hourly_stale`" in create[0]["body"] and "`demo-sports-202610211405-a-story`" in create[0]["body"]
     assert "SecretSourceXYZ" not in create[0]["body"] and "No hourly" not in create[0]["body"], "never the texts"
 
 

@@ -37,11 +37,11 @@ def test_red_and_amber_health_show_their_reasons_and_green_shows_nothing():
     now = 1_792_600_000_000
     red = {"status": "red", "checked_at": now, "reasons": [
         {"code": "hourly_stale", "level": "red", "text": "No hourly post run seen for 3h.", "since": now, "ids": []},
-        {"code": "topics_stale", "level": "amber", "text": "The Studio story list for Huddle Room was last refreshed 2h ago.",
-         "since": now, "ids": ["huddle"]}]}
+        {"code": "topics_stale", "level": "amber", "text": "The Studio story list for Demo Sports was last refreshed 2h ago.",
+         "since": now, "ids": ["demo-sports"]}]}
     text = _app_text(red)
     assert "Part of the pipeline is not working" in text
-    assert "No hourly post run seen for 3h." in text and "Huddle Room was last refreshed 2h ago" in text
+    assert "No hourly post run seen for 3h." in text and "Demo Sports was last refreshed 2h ago" in text
     amber = {"status": "amber", "checked_at": now, "reasons": red["reasons"][1:]}
     assert "running with problems" in _app_text(amber)
     green = _app_text({"status": "green", "checked_at": now, "reasons": []})
@@ -58,7 +58,7 @@ def test_the_queue_is_drawn_without_waiting_for_the_health_status():
     from playwright.sync_api import sync_playwright
 
     from bore.cards import _chrome_path
-    draft = {"id": "huddle-1", "page": "huddle", "page_name": "Huddle Room", "caption": "A caption", "status": "pending",
+    draft = {"id": "demo-sports-1", "page": "demo-sports", "page_name": "Demo Sports", "caption": "A caption", "status": "pending",
              "headline": "A headline", "created_at_unix": 1_792_600_000}
     replies = {"/api/drafts": {"drafts": [draft]}, "/api/stats": {"counts": {}, "publisher": {}, "lessons": []},
                "/api/links": {"links": []}}

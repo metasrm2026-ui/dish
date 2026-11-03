@@ -2,7 +2,8 @@
 editors' verdicts can be counted per kind and the ranking can learn which kinds they approve.
 
 A page's playbook may define its own `kinds: [{id, label, match: [regex, ...]}]` (first match
-wins); otherwise the generic list for the page's niche is used (sports or celebrity).
+wins), or name one of the generic lists (`story_kinds: sports | celebrity`); otherwise the list
+for the page's niche is used (sports when the niche names a sport, else celebrity).
 """
 from __future__ import annotations
 
@@ -53,14 +54,21 @@ OTHER = ("other", "Other")
 _LABELS = {ALIASES.get(k, k): lbl for k, lbl, _ in SPORTS + CELEBRITY} | {OTHER[0]: OTHER[1]}
 
 
+PROFILES = {"sports": SPORTS, "celebrity": CELEBRITY}
+
+
 def profile_for(page_slug: str, playbook: dict | None = None) -> list:
-    """The ordered kind list for a page: the playbook's own, else sports or celebrity."""
+    """The ordered kind list for a page: the playbook's own, the generic list it names
+    (story_kinds), else sports or celebrity from its niche."""
     pb = playbook or {}
     own = pb.get("kinds")
     if isinstance(own, list) and own:
         return [(k.get("id"), k.get("label") or k.get("id"), k.get("match") or []) for k in own if k.get("id")]
+    named = PROFILES.get(str(pb.get("story_kinds") or "").strip().lower())
+    if named:
+        return named
     hay = " ".join(str(x) for x in (page_slug, pb.get("name"), pb.get("niche"), pb.get("page"))).lower()
-    return SPORTS if re.search(r"\b(nfl|football|nba|mlb|nhl|soccer|sports?|huddle)\b", hay) else CELEBRITY
+    return SPORTS if re.search(r"\b(nfl|football|nba|mlb|nhl|soccer|sports?)\b", hay) else CELEBRITY
 
 
 _CACHE: dict = {}
@@ -99,4 +107,4 @@ def ids(profile: list) -> list[str]:
     return list(dict.fromkeys(ALIASES.get(k, k) for k, _, _ in profile)) + [OTHER[0]]
 
 
-__all__ = ["SPORTS", "CELEBRITY", "CRIME_COURT", "CRIME_ABUSE_RX", "profile_for", "kind_of", "kind_for", "label", "ids"]
+__all__ = ["SPORTS", "CELEBRITY", "PROFILES", "CRIME_COURT", "CRIME_ABUSE_RX", "profile_for", "kind_of", "kind_for", "label", "ids"]

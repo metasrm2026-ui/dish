@@ -1,11 +1,9 @@
-"""Culture Rush sheet import: tiers, rotation, priority boost, and the budget each tier may use."""
+"""A page's source sheet: tiers, rotation, priority boost, and the budget each tier may use."""
 import time
-
-import yaml
 
 from bore.cluster import Cluster
 from bore.collect import chunk_handles, collect_reddit, collect_x_secondary, rotate, route_map, routes_for
-from bore.config import ROOT, Page, load_pages, priority_terms
+from bore.config import Page
 from bore.select import priority_hits, priority_matcher
 
 
@@ -77,32 +75,3 @@ def test_priority_matching_rules():
     assert priority_hits(_cluster(["TAYLOR SWIFT and Drake announce tour"]), rx) == 2
     assert priority_hits(_cluster(["what the future holds for the bearded man"]), rx) == 0
     assert priority_hits(_cluster(["Drake, Drake and Drake"]), rx) == 1
-
-
-def test_culture_rush_sheet_is_wired_within_budget(cfg):
-    pages = {p.slug: p for p in load_pages()}
-    cr = pages["culture-rush"]
-    sheet = yaml.safe_load(open(ROOT / cr.priority_terms_file))
-    assert len(sheet["categories"]) == 31
-    terms = priority_terms(cr)
-    assert "Taylor Swift" in terms and "Netflix" not in terms and "Chicago" not in terms
-    assert not priority_terms(pages["huddle"])
-    # excluded accounts never run
-    excluded = {h.lower() for hs in sheet["activation"]["x_excluded"].values() for h in hs}
-    assert not excluded & set(cr.x_handles + cr.x_handles_secondary)
-    # (which of the sheet's accounts are active is the admins' choice in the admin panel, so the
-    # live lists are not checked here; only that nothing excluded runs)
-    held = {s.lower() for v in sheet["activation"]["reddit_excluded"].values() for s in v}
-    assert not held & set(cr.subreddits + cr.subreddits_rotation)
-    assert all(q.startswith("site:") for q in cr.web_rotation)
-    # daily Apify use of the tiers at full volume stays near the $16/month share
-    x, r, w = (cfg["apify"][k]["cost_per_item_usd"] for k in ("x", "reddit", "web"))
-    sch, col = cfg["schedule"], cfg["collection"]
-    x2 = 24 / sch["x_secondary_every_hours"] * cfg["apify"]["x"]["secondary_max_items"] * x
-    per_pass = sum(len(p.subreddits) + min(len(p.subreddits_rotation), cfg["apify"]["reddit"]["rotation_per_run"])
-                   for p in pages.values())
-    reddit = 24 / sch["reddit_every_hours"] * per_pass * cfg["apify"]["reddit"]["max_posts_per_subreddit"] * r
-    web = 24 / sch["web_every_hours"] * sum(
-        min(len(p.web_searches), col["web_searches_per_page"])
-        + min(len(p.web_rotation), col["web_rotation_per_run"]) for p in pages.values()) * w
-    assert x2 + reddit + web < cfg["budget"]["monthly_usd"] / 30

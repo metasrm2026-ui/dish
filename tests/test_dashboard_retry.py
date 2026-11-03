@@ -175,7 +175,7 @@ def test_dropped_connections_are_tried_again_and_each_request_acts_once(server, 
 
 def test_a_post_the_dashboard_may_have_acted_on_is_never_sent_again(server, dash):
     for call in (lambda: studio._post(dash, "jobs/j1", {"status": "running"}),       # a second claim: 409, "SKIP"
-                 lambda: dash.create_draft({"page": "huddle"})):                     # a second draft
+                 lambda: dash.create_draft({"page": "demo-sports"})):                     # a second draft
         for cut in ("eof", "badtls"):
             server.plan[:], server.seen[:] = [cut], []
             with pytest.raises(requests.RequestException):
@@ -190,10 +190,10 @@ def test_a_post_the_dashboard_may_have_acted_on_is_never_sent_again(server, dash
 def test_reads_and_whole_record_writes_are_tried_again_after_the_request_was_cut(server, dash):
     for cut in ("eof", "badtls"):
         server.plan[:], server.seen[:] = [cut], []
-        assert studio._get(dash, "feed", page="huddle") == {"ok": True, "jobs": [], "links": [], "feed": None}
+        assert studio._get(dash, "feed", page="demo-sports") == {"ok": True, "jobs": [], "links": [], "feed": None}
         assert len(server.seen) == 2, cut
     server.plan[:], server.seen[:] = ["eof"], []
-    studio._post(dash, "feed", {"page": "huddle", "stories": []})        # replaces the record: same result twice
+    studio._post(dash, "feed", {"page": "demo-sports", "stories": []})        # replaces the record: same result twice
     assert server.seen == [("POST", "/api/routine/feed")] * 2
 
 
@@ -212,10 +212,10 @@ def test_only_the_exact_record_replacing_paths_resend_a_post(server, dash):
     for path in ("feed-publish", "lessons/reset", "feedback"):     # the same prefix as an idempotent POST
         server.plan[:], server.seen[:] = ["eof"], []
         with pytest.raises(requests.RequestException):
-            studio._post(dash, path, {"page": "huddle"})
+            studio._post(dash, path, {"page": "demo-sports"})
         assert len(server.seen) == 1, path
     server.plan[:], server.seen[:] = ["eof"], []
-    dash.save_lessons("huddle", {})
+    dash.save_lessons("demo-sports", {})
     assert server.seen == [("POST", "/api/routine/lessons")] * 2
 
 
@@ -255,7 +255,7 @@ def test_a_feed_that_cannot_be_read_stops_the_run_instead_of_publishing_it_strip
 
     import bore.select
     from bore.config import Page
-    monkeypatch.setattr(studio, "load_pages", lambda: [Page.from_dict({"slug": "demo", "name": "Demo"})])
+    monkeypatch.setattr(studio, "load_pages", lambda: [Page.from_dict({"slug": "demo", "name": "Demo", "status": "live"})])
     monkeypatch.setattr(studio, "studio_meta", lambda: {"demo": {}})
     monkeypatch.setattr(bore.select, "select_page", lambda *a, **k: NS(trends=[], watchlist=[]))
 

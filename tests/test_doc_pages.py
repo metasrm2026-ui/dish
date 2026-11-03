@@ -208,14 +208,14 @@ def test_an_ideas_or_compose_job_draws_the_templates_and_visual_pages_it_opens(s
 
 def test_the_brief_lists_the_page_images(monkeypatch, tmp_path):
     import bore.routine as R
-    images = [f"private/docs/huddle/templates/page-0{i}.png" for i in (1, 2)]
-    meta = {"huddle": {"name": "Huddle", "docs": {"templates": {"version": 4, "file": "private/docs/huddle/templates.txt",
+    images = [f"private/docs/demo-sports/templates/page-0{i}.png" for i in (1, 2)]
+    meta = {"demo-sports": {"name": "Demo Sports", "docs": {"templates": {"version": 4, "file": "private/docs/demo-sports/templates.txt",
                                                                 "pages": 2, "images": images, "image_pages": 2}}}}
     monkeypatch.setattr(S, "WORK", tmp_path)
     monkeypatch.setattr(S, "studio_meta", lambda: meta)
     monkeypatch.setattr(S, "_page_templates", lambda page: [])
     monkeypatch.setattr(R, "load_playbook", lambda page: {})
-    job = {"id": "j1", "kind": "ideas", "page": "huddle", "batch_id": "b",
+    job = {"id": "j1", "kind": "ideas", "page": "demo-sports", "batch_id": "b",
            "posts": [{"id": "p1", "story": {"headline": "H", "summary": "S.", "sources": []}}]}
     brief = json.loads((S.write_job(job, {}) / "p1" / "brief.json").read_text())
     assert brief["studio"]["docs"]["templates"]["images"] == images

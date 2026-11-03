@@ -148,18 +148,18 @@ PLACE_OF = frozenset("at in across near".split())     # "in North America": a pl
 # object ("emails with Jeffrey Epstein", "per Alex Rivera"). Not by position, nor every "X says":
 # on 558 real drafts (Sep 29-Oct 21) preferring "WR Tank Dell" over a plainly named person picked
 # the wrong one more often (an injury list names everyone by position), and so did taking "X says"
-# for a speaker (Culture Rush's news is often what a celebrity says).
+# for a speaker (a celebrity page's news is often what a celebrity says).
 STAFF_BEFORE = frozenset("hc coach gm oc dc coordinator manager owner president ceo chairman commissioner".split())
 ROLE_RANK = {"": 3, "staff": 2, "speaker": 1, "object": 0, "place": 0}
 
 
 def _team_words() -> frozenset[str]:
-    from .cards import NFL_TEAMS
+    from .teams import NFL_TEAMS
     return frozenset(NFL_TEAMS)
 
 
 def _city_names() -> frozenset[str]:
-    from .cards import NFL_CITIES
+    from .teams import NFL_CITIES
     return frozenset(c.lower() for c in NFL_CITIES)
 
 

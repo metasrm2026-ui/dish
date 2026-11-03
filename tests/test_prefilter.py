@@ -1,52 +1,69 @@
 """Sep 30: the routine made no posts because its shortlist was birthdays, anniversaries, promo
-and site section pages; Claude rightly skipped them all. The prefilter drops those before
-selection and boosts the kinds editors approve."""
+and site section pages; Claude rightly skipped them all. The page playbook's prefilter drops those
+before selection and boosts the kinds editors approve."""
 import time
+
+import pytest
 
 from bore.collect import section_page
 from bore.config import Page
 from bore.select import select_page
 
 NOW = time.time()
+# made-up playbooks' prefilters, of the shape the onboarding routine writes (playbook.prefilter)
+PLAYBOOKS = {
+    "demo-celeb": {"prefilter": {
+        "skip": [r"\b\d+ years ago today\b", r"\bhappy \d+\w* birthday\b", r"\bnational [\w ]{1,30} day\b",
+                 r"\b(looking|looks) (breathtaking|stunning) on the red carpet\b", r"\bwill star in\b"],
+        "boost": [r"\b(arrested|charged|sentenced)\b"]}},
+    "demo-sports": {"prefilter": {
+        "skip": [r"\bon their way to\b", "🎧", r"\bpodcast\b", r"\bpractice squad\b"],
+        "boost": [r"\b(ruled out|injur(y|ed)|sprain)\b"]}},
+}
+
+
+@pytest.fixture(autouse=True)
+def _playbooks(monkeypatch):
+    monkeypatch.setattr("bore.routine.load_playbook", lambda slug: PLAYBOOKS.get(slug, {}))
 
 
 def _items(texts, page):
     out = []
     for i, t in enumerate(texts):
-        for a in ("popcrave", "popbase") if page == "culture-rush" else ("adamschefter", "rapsheet"):
+        for a in ("starwire", "popdesk") if page == "demo-celeb" else ("samreporter", "gridironwire"):
             out.append({"id": f"{i}{a}", "platform": "x", "author": a, "text": t, "created_at": NOW - 1800,
                         "engagement": 5000})
     return out
 
 
-def test_culture_rush_junk_is_dropped_and_approved_kinds_rise(cfg):
-    page = Page.from_dict({"slug": "culture-rush", "name": "Culture Rush"})
+def test_demo_celeb_junk_is_dropped_and_approved_kinds_rise(cfg):
+    page = Page.from_dict({"slug": "demo-celeb", "name": "Demo Celeb"})
     texts = ["12 years ago today, Ariana Grande and The Weeknd released Love Me Harder, a huge single then",
              "Happy 29th birthday to the talented Max Verstappen, one of the fastest drivers ever",
              "Today is National Love People Day, so share some love with the people around you",
              "Anne Hathaway looking breathtaking on the red carpet at the VERITY premiere in New York City",
              "Jennifer Lawrence will star in Zach Cregger's sci-fi thriller The Flood from Universal",
              "Rapper Big Star arrested on felony charges in Miami after a traffic stop on Tuesday night"]
-    res = select_page(page, _items(texts, "culture-rush"), cfg, [], NOW, quota=2)
+    res = select_page(page, _items(texts, "demo-celeb"), cfg, [], NOW, quota=2)
     heads = [t.headline for t in res.shortlist]
     assert len(heads) == 1 and "arrested" in heads[0]
     assert sum(1 for x in res.suppressed if x.get("why", "").startswith("prefilter")) == 5
 
 
 def test_attending_court_is_news_not_a_red_carpet(cfg):
-    page = Page.from_dict({"slug": "culture-rush", "name": "Culture Rush"})
+    page = Page.from_dict({"slug": "demo-celeb", "name": "Demo Celeb"})
     res = select_page(page, _items(["Singer Big Star attends court hearing as the fraud trial opens in Los Angeles"],
-                                   "culture-rush"), cfg, [], NOW, quota=2)
+                                   "demo-celeb"), cfg, [], NOW, quota=2)
     assert len(res.shortlist) == 1
 
 
-def test_huddle_logistics_and_podcasts_are_dropped(cfg):
-    page = Page.from_dict({"slug": "huddle", "name": "Huddle Room"})
+def test_demo_sports_logistics_and_podcasts_are_dropped(cfg):
+    page = Page.from_dict({"slug": "demo-sports", "name": "Demo Sports"})
     texts = ["The Commanders are on their way to London for Sunday's game against the Colts",
              "It is time to push the panic button on Patriots QB Drake Maye? With Ty Schmit 🎧",
              "Jets are signing LB Nick Dawkins to the practice squad, per sources familiar with it",
              "Bears QB Caleb Williams has been ruled out for Sunday with a high ankle sprain, per sources"]
-    res = select_page(page, _items(texts, "huddle"), cfg, [], NOW, quota=2)
+    res = select_page(page, _items(texts, "demo-sports"), cfg, [], NOW, quota=2)
     assert [t.headline[:30] for t in res.shortlist] == ["Bears QB Caleb Williams has be"]
 
 
@@ -122,7 +139,7 @@ def test_topic_rules_follow_the_playbooks_no_list():
 
 
 def test_politics_and_storms_leave_but_stars_people_and_personal_moments_stay(cfg, monkeypatch):
-    """Oct 9-13 the routine skipped every politics and storm story it was briefed on (Culture Rush:
+    """Oct 9-13 the routine skipped every politics and storm story it was briefed on (Demo Celeb:
     a third of its briefs with the service pieces). A star clashing with a politician is an
     approved kind, so a politician's name alone, or any entertainment or human angle, keeps it."""
     monkeypatch.setattr("bore.routine.load_playbook", lambda slug: CELEB_PB)

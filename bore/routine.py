@@ -62,8 +62,8 @@ def admin_sources(page: Page, members: list[dict]) -> list[str]:
 def _full_articles(posts: list[dict], limit: int = 2, links: int = 2) -> None:
     """A feed article carries a one-line summary: read the article itself for the facts (`limit`
     of them). A Reddit link post is only a title: the article it shares is added as a post of its
-    own, credited to its site (Oct 14-21: 49 Culture Rush skips were 'single uncredited Reddit
-    post, no outlet'), once per article and only when the posts lack it (`links` of them)."""
+    own, credited to its site (a single uncredited Reddit post, with no outlet, was the commonest
+    reason a story was skipped), once per article and only when the posts lack it (`links` of them)."""
     from .linkpost import read_article
     from .textutil import domain
     have, shared = {p.get("url") for p in posts if p["platform"] == "web"}, []
@@ -268,14 +268,13 @@ COPY_SCHEMA_DOC = {
     "template": "one of the playbook card.templates",
     "headline_lines": ["2-4 short ALL-CAPS lines (quote template: the quote split into 2-3 lines)"],
     "highlight": "word/phrase to colour, or empty",
-    "label": "stamp (REPORT/BREAKING) / quote speaker ('Kevin Stefanski:') / casefile note, or empty",
+    "label": "stamp (REPORT/BREAKING) / quote speaker ('Sam Example:') / casefile note, or empty",
     "dek": "one-line sentence-case subtitle, or empty",
     "stat_label": "optional", "stat_value": "optional", "footer": "optional", "footer_sub": "optional",
-    "team": "NFL team nickname for colours (huddle), or empty",
     "photo_index": "index into photos[] of the subject photo, or -1",
     "as_is": "editor's link only: true when the editor asked for the images as they are (no edits/branding/card)",
     "photos": "with as_is: indexes into photos[] to post, in order (default: photo_index, else all)",
-    "photo_search": "if no usable photo of the subject: a search query for one (e.g. 'Kevin Stefanski Falcons'), else empty",
+    "photo_search": "if no usable photo of the subject: a search query for one (e.g. 'Sam Example Demo FC'), else empty",
     "people_in_photo": ["names of the real people visible in the chosen photo (the card may show only these)"],
     "caption": "the full Facebook caption, hashtags on the last line",
     "kind": "the story kind: brief.kind, or the right one of brief.kinds if that is wrong",
@@ -285,12 +284,17 @@ COPY_SCHEMA_DOC = {
 
 
 # ------------------------------------------------------------------------------- render
-def team_line(team: str) -> str:
-    if not team:
-        return ""
-    from .cards import team_colors
-    c1, c2, _ = team_colors(team)
-    return f"Team: {team.title()} - use their colours {c1} and {c2}."
+def page_theme(brief: dict) -> dict:
+    """The page's theme (colours, logo text, fonts): the Studio brief's own, else the page's as
+    `studio sync` stored it (the hourly briefs carry none). Every card of the page is drawn in it."""
+    from .studio import studio_meta
+    return dict((brief.get("studio") or {}).get("theme") or (studio_meta().get(brief.get("page") or "") or {}).get("theme") or {})
+
+
+def theme_line(brief: dict) -> str:
+    t = page_theme(brief)
+    cols = [t[k] for k in ("accent", "bg") if t.get(k)]
+    return f"The page's colours: {' and '.join(cols)}." if cols else ""
 
 
 def krea_prompt(brief: dict, copy: dict, feedback: str = "") -> str:
@@ -301,7 +305,7 @@ def krea_prompt(brief: dict, copy: dict, feedback: str = "") -> str:
     elements = []
     if copy.get("label"):
         elements.append(("stamp/label", copy["label"]))
-    if tpl == "quote":
+    if tpl in ("quote", "speaker"):
         elements += [(f"quote line {i + 1} (in quotation marks)", l) for i, l in enumerate(lines)]
     else:
         elements += [(f"headline line {i + 1}", l) for i, l in enumerate(lines)]
@@ -309,8 +313,9 @@ def krea_prompt(brief: dict, copy: dict, feedback: str = "") -> str:
                     ("footer", "footer line 1"), ("footer_sub", "footer line 2")):
         if copy.get(k):
             elements.append((name, copy[k]))
-    if brief["page"] == "culture-rush":
-        elements.append(("page logo", "CULTURE RUSH"))
+    logo = str(page_theme(brief).get("logo_text") or "").strip().upper()
+    if logo:                                   # the page's own logo text, from its theme
+        elements.append(("page logo", logo))
     text_spec = [f"The card contains EXACTLY these {len(elements)} text elements, spelled exactly, and NO other text:"]
     text_spec += [f"{i + 1}. {name}: \"{text}\"" for i, (name, text) in enumerate(elements)]
     text_spec.append("Do NOT add any other words, numbers, stats, badges, stamps, subtitles, dates, captions, "
@@ -324,14 +329,13 @@ def krea_prompt(brief: dict, copy: dict, feedback: str = "") -> str:
            "The reference photo shows no person the card needs: do NOT add, invent or draw any person or face.")
     style = card.get("style", "")
     tpl_style = style.get(tpl) or next(iter(style.values()), "") if isinstance(style, dict) else str(style)
-    brand = (f'The page logo reads "{pb.get("name", brief["page_name"]).upper()}".' if brief["page"] == "culture-rush"
-             else "")
+    brand = f'The page logo reads "{logo}".' if logo else ""
     return "\n".join(filter(None, [
         f'Design a {CARD_W}x{CARD_H} (4:5) Facebook news graphic for the page "{pb.get("name") or brief["page_name"]}", matching the page\'s '
         f"own post style{' shown in the style reference images' if pb.get('style_refs') else ''}.",
         f"Layout: {tpl_style}",
         who,
-        team_line(copy.get("team", "")),
+        theme_line(brief),
         brand,
         *text_spec,
         "No watermarks. No league, team or brand logos" + (" other than the page's own logo." if brand else "."),
@@ -357,17 +361,16 @@ def art_prompt(brief: dict, copy: dict, feedback: str = "") -> str:
     tpl = copy.get("template") or card.get("default_template", "")
     base = (card.get("art") or {}).get(tpl) or next(iter((card.get("art") or {}).values()), "Dark textured background")
     if copy.get("template_spec"):
-        from .studio import studio_meta
         from .tspec import find
         art = find(copy["template_spec"], brief).get("art") or {}
-        theme = (brief.get("studio") or {}).get("theme") or (studio_meta().get(brief["page"]) or {}).get("theme") or {}
+        theme = page_theme(brief)
         colours = " and ".join(theme[k] for k in ("bg", "accent") if theme.get(k))
         base = (art.get("prompt") or "Abstract textured background artwork").strip().rstrip(".") + (
             f", in the page's colours {colours}" if colours else "")
-    if "{c1}" in base or "{c2}" in base:
-        from .cards import team_colors
-        c1, c2, _ = team_colors(copy.get("team", ""))
-        base = base.replace("{c1}", f"team colour {c1}").replace("{c2}", f"accent colour {c2}")
+    if "{c1}" in base or "{c2}" in base:          # the playbook's art text names the page's colours
+        from .layouts import theme_of
+        t = theme_of(page_theme(brief))
+        base = base.replace("{c1}", f"main colour {t['accent']}").replace("{c2}", f"background colour {t['bg']}")
     parts = [base.strip().rstrip(".") + "."]
     if copy.get("art_mood"):
         parts.append(f"Mood for this story: {copy['art_mood']}.")
@@ -473,7 +476,7 @@ def premium_prompt(brief: dict, copy: dict, credit: str, layout: bool, feedback:
         ("The SECOND image is the page's own card for this post: keep its layout (where the photo, the headline, "
          "the numbers, banners and labels sit, their order, which words are biggest and their colour roles) and "
          "make it look premium." if layout else ""),
-        team_line(copy.get("team", "")),
+        theme_line(brief),
         (f"Mood for this story's scene: {copy['art_mood']}." if copy.get("art_mood") else ""),
         f"The post contains EXACTLY these {len(texts)} text elements, each spelled exactly as written, and NO other text:",
         *[f'{i + 1}. "{t}"' for i, t in enumerate(texts)],
@@ -608,6 +611,23 @@ def krea_daily_allowance(store, cap: int, now: float | None = None) -> tuple[int
     return today, max(0, (cap - before) // days_left)
 
 
+def _page_day_key(slug: str, now: float | None = None) -> str:
+    return f"krea_page:{datetime.fromtimestamp(now or time.time(), timezone.utc):%Y-%m-%d}:{slug}"
+
+
+def krea_page_today(store, slug: str, now: float | None = None) -> int:
+    """The premium cards this routine made for the page today (UTC): what its premium_per_day counts
+    here (the dashboard counts Studio's too)."""
+    return int(store.get_kv(_page_day_key(slug, now), 0) or 0)
+
+
+def krea_page_made(store, slug: str, now: float | None = None) -> int:
+    """Count one more premium card made for the page today (UTC)."""
+    n = krea_page_today(store, slug, now) + 1
+    store.set_kv(_page_day_key(slug, now), n)
+    return n
+
+
 def krea_images_this_month(store, now: float | None = None) -> int:
     from .krea import month_start
     return store.db.execute("SELECT COUNT(*) FROM spend WHERE actor LIKE 'krea:%' AND at >= ?",
@@ -670,20 +690,19 @@ def render_fallback(d: Path, cfg: dict, art: bytes | None = None, engine: str = 
                     focus=focus, face_size=face_size, face_box=face_box if focus else None,
                     highlight=copy.get("highlight", ""), label=copy.get("label", ""), dek=copy.get("dek", ""),
                     stat_label=copy.get("stat_label", ""), stat_value=copy.get("stat_value", ""),
-                    footer=copy.get("footer", ""), footer_sub=copy.get("footer_sub", ""), team=copy.get("team", ""),
-                    photos=photos, art=art, items=copy.get("items") or [],
-                    theme=(brief.get("studio") or {}).get("theme"))
+                    footer=copy.get("footer", ""), footer_sub=copy.get("footer_sub", ""),
+                    photos=photos, art=art, items=copy.get("items") or [], theme=page_theme(brief))
     from .cards import FaceBlocked
     try:
         (d / "card.jpg").write_bytes(render(brief["page"], spec))
     except FaceBlocked:
         # photo-left would cover the face: the photo-first layout fits any face position
-        if (brief["page"], spec.template or "headline") != ("culture-rush", "headline"):
+        if spec.template != "side_headline":
             raise
         spec.template = "spotlight"
         (d / "card.jpg").write_bytes(render(brief["page"], spec))
         copy["template"] = "spotlight"
-        copy.setdefault("notes", []).append("headline layout would cover the face: switched to spotlight")
+        copy.setdefault("notes", []).append("side_headline layout would cover the face: switched to spotlight")
         (d / "copy.json").write_text(json.dumps(copy, indent=1, ensure_ascii=False))
     # the same card without worn lettering: `verify` reads the text on it (OCR loses short worn
     # words); the geometry is identical, so face checks still run on the real card
@@ -705,7 +724,6 @@ def _render_spec(d: Path, brief: dict, copy: dict, art: bytes | None, engine: st
 
     from . import tspec
     from .cards import render
-    from .studio import studio_meta
     spec = tspec.find(copy["template_spec"], brief)
     photos, idx = [], copy.get("photo_index", -1)
     if isinstance(idx, int) and 0 <= idx < len(brief["photos"]):
@@ -716,7 +734,7 @@ def _render_spec(d: Path, brief: dict, copy: dict, art: bytes | None, engine: st
     if not photos:
         raise tspec.SpecError("a template spec draws the chosen photo: set photo_index")
     # the page's colours from the admin panel (the hourly briefs carry none of their own)
-    theme = (brief.get("studio") or {}).get("theme") or (studio_meta().get(brief["page"]) or {}).get("theme")
+    theme = page_theme(brief) or None
     card = tspec.card_spec(spec, copy, photos, theme=theme, art=art if spec.get("art") else None)
     (d / "card.jpg").write_bytes(render(brief["page"], card))
     # the clean twin `verify` reads (same geometry, no worn lettering), and where each line of text is

@@ -1,4 +1,4 @@
-"""Culture Rush supply (Oct 17-21): Reddit link posts were stored as bare titles (their article and
+"""Demo Celeb supply (Oct 17-21): Reddit link posts were stored as bare titles (their article and
 image dropped) and skipped as 'single uncredited Reddit post'; escalation searches with the page's
 name appended brought class schedules and investment pages."""
 import json
@@ -13,7 +13,7 @@ from conftest import FIXTURES
 # the actor's records of Sep 25 as the parser reads them (their field shapes: media_metadata,
 # url_overridden_by_dest, domain, media_type), with made-up ids, titles, text, links and counts:
 # which subreddit a page reads is confidential
-RAW = json.loads((FIXTURES / "reddit_actor_20260925.json").read_text())
+RAW = json.loads((FIXTURES / "reddit_actor.json").read_text())
 
 
 def _norm(raw, cfg):
@@ -86,7 +86,7 @@ def test_story_photos_use_the_linked_articles_image(monkeypatch):
 
 
 def test_escalation_searches_never_append_the_page_name():
-    page = Page.from_dict({"slug": "culture-rush", "name": "Culture Rush", "subreddits": ["demo"]})
+    page = Page.from_dict({"slug": "demo-celeb", "name": "Demo Celeb", "subreddits": ["demo"]})
     members = [{"id": f"m{i}", "platform": "reddit", "author": "u", "subreddit": "demo", "engagement": 50, "created_at": 1.0,
                 "title": "Karen variant spotted at the grocery store demanding a manager"} for i in range(2)]
     from bore.cluster import IDF

@@ -534,9 +534,9 @@ def lint_slots(spec: dict, copy: dict) -> list[str]:
 
 # --------------------------------------------------------------------------- colours
 def _theme(card) -> dict:
-    from .layouts import _contrast_ink, theme_of
+    from .layouts import contrast_ink, theme_of
     t = theme_of(card.theme)
-    return {**t, "accent_ink": _contrast_ink(t["accent"]), "white": "#ffffff", "black": "#000000"}
+    return {**t, "accent_ink": contrast_ink(t["accent"]), "white": "#ffffff", "black": "#000000"}
 
 
 def _hex(c: str, theme: dict) -> str:
@@ -547,10 +547,10 @@ def _hex(c: str, theme: dict) -> str:
 def color(c: str, theme: dict, on: str | None = None) -> str:
     """CSS colour for a role or hex with an optional /opacity; "auto" is the readable ink on `on` (the
     zone's plate, else the background)."""
-    from .layouts import _contrast_ink
+    from .layouts import contrast_ink
     m = COLOR_RE.match(c or "ink")
     base, alpha = m.group(1), m.group(2)
-    hx = _contrast_ink(_hex(on or "bg", theme)) if base == "auto" else _hex(base, theme)
+    hx = contrast_ink(_hex(on or "bg", theme)) if base == "auto" else _hex(base, theme)
     if alpha is None or int(alpha) >= 100:
         return hx
     r, g, b = (int(hx[i:i + 2], 16) for i in (1, 3, 5))

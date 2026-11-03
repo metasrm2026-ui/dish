@@ -40,24 +40,19 @@ CARD_FIELDS = ["label", "headline_lines", "dek", "stat_label", "stat_value", "fo
 LIMITS = {  # characters, per template family
     "headline_line": 22, "quote_line": 30, "dek": 64, "label": 22, "stat": 40, "footer": 36, "words": 26,
 }
-BRAND_WORDS = {"culture-rush": {"CULTURE", "RUSH"}, "huddle": set()}
 
 
 def _logo_text(brief: dict, copy: dict | None) -> str:
-    """The theme's logo text the card draws: the Studio brief's theme, or (a template spec on an hourly
-    brief, which carries none) the page's theme as `studio sync` stored it, which the renderer draws."""
-    logo = ((brief.get("studio") or {}).get("theme") or {}).get("logo_text") or ""
-    if not logo and (copy or {}).get("template_spec") and not (brief.get("studio") or {}).get("theme"):
-        from .studio import studio_meta
-        logo = ((studio_meta().get(brief.get("page") or "") or {}).get("theme") or {}).get("logo_text") or ""
-    return logo
+    """The theme's logo text the card draws: the Studio brief's theme, or (an hourly brief, which
+    carries none) the page's theme as `studio sync` stored it, which the renderer draws."""
+    from .routine import page_theme
+    return str(page_theme(brief).get("logo_text") or "")
 
 
 def brand_words(brief: dict, copy: dict | None = None) -> set[str]:
     """Text the layout itself adds: the page logo (playbook logo_words, Studio theme logo text)
     and the generic layouts' fixed marks."""
-    out = set(BRAND_WORDS.get(brief.get("page"), set()))
-    out |= {w.upper() for w in ((brief.get("playbook") or {}).get("logo_words") or [])}
+    out = {w.upper() for w in ((brief.get("playbook") or {}).get("logo_words") or [])}
     out |= {w for w in re.split(r"\s+", _logo_text(brief, copy).upper()) if w}
     if (copy or {}).get("template_spec"):      # a template spec's fixed words ("VS") come with the layout
         from .tspec import SpecError, find, static_words
@@ -244,7 +239,7 @@ def lint(brief: dict, copy: dict, playbook: dict | None = None, min_photo_short_
 
     # 4. lengths (a template spec's slot rules took their place above)
     generic = template in GENERIC and template not in allowed_templates
-    hl_limit = LIMITS["quote_line"] if template == "quote" else LIMITS["headline_line"] + (8 if generic else 0)
+    hl_limit = LIMITS["quote_line"] if template in ("quote", "speaker") else LIMITS["headline_line"] + (8 if generic else 0)
     for line in [] if copy.get("template_spec") else copy.get("headline_lines") or []:
         if len(line) > hl_limit:
             errors.append(f"headline line too long ({len(line)} > {hl_limit}): '{line}'")

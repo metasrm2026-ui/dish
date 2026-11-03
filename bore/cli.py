@@ -36,15 +36,25 @@ def _apify(cfg, store=None):
     return ap
 
 
-def _pages(args, cfg) -> list[Page]:
+# A page runs (collection, the hourly posts) only while it is live. One going live runs only when it
+# is named (`--page`): the onboarding routine's first run, before it is live (docs/PRODUCT.md).
+FIRST_RUN = "going_live"
+
+
+def _pages(args, cfg, running: bool = False) -> list[Page]:
+    """The pages a command works on (`--page` names one). running: only the pages that run, for
+    the hourly flow and its collection: live ones, and a page going live when it is named."""
     pages = load_pages()
     if not pages:
-        sys.exit("config/pages.yaml has no pages. Run `bore import-workbook <file.xlsx>` first.")
+        sys.exit("no pages: run `python -m bore.cli studio sync` first (pages come from the dashboard)")
     if getattr(args, "page", None):
         pages = [p for p in pages if p.slug == args.page]
         if not pages:
             sys.exit(f"unknown page {args.page}")
-    return pages
+        if running and not (pages[0].live or pages[0].status == FIRST_RUN):
+            sys.exit(f"page {args.page} is {pages[0].status}, not live: it does not run")
+        return pages
+    return [p for p in pages if p.live] if running else pages
 
 
 # ------------------------------------------------------------------ commands
@@ -269,20 +279,18 @@ def _pub_plan(dash, sp: dict, busy_args, now: float, settle: bool = True) -> dic
     to do, and an outdated original already in SocialPilot is flagged for a person to delete."""
     from datetime import datetime as _dt
     from zoneinfo import ZoneInfo
-    from .publish import BREAKER_MINUTES, NEVER_LOGIN_IDS, parse_busy, plan, split_waiting
-    accounts, tz = sp.get("accounts", {}), sp.get("timezone", "Asia/Kolkata")
+    from .publish import BREAKER_MINUTES, blocked_login_ids, page_account, parse_busy, plan, rule_minutes, split_waiting
+    tz = sp.get("timezone", "Asia/Kolkata")
     rules = sp.get("scheduling", {})
-    blocked = {str(b) for b in sp.get("blocked_login_ids", [])} | NEVER_LOGIN_IDS
+    blocked = blocked_login_ids(sp)
     local = lambda t, fmt="%Y-%m-%d %H:%M": _dt.fromtimestamp(t, ZoneInfo(tz)).strftime(fmt)
     data = dash.queue()
     scheduled, in_progress = data.get("scheduled", []), data.get("in_progress", [])
 
-    def account(x: dict) -> dict:       # config first, then the account an admin set for a newer page
-        acc = dict(accounts.get(x["page"]) or {})
-        lid = x.get("socialpilot_login_id")
-        if not acc.get("loginId") and lid:
-            acc = {"name": x.get("page_name") or x["page"], "loginId": int(lid) if str(lid).isdigit() else lid}
-        return acc
+    def account(x: dict) -> dict:       # the page's own account (onboarding), never a blocked one
+        lid = str(x.get("socialpilot_login_id") or "").strip()
+        return {} if not lid or lid in blocked else {"name": x.get("page_name") or x["page"],
+                                                     "loginId": int(lid) if lid.isdigit() else lid}
 
     busy = {}
     for s_ in scheduled + in_progress:                       # incl. other runs' claims
@@ -291,8 +299,6 @@ def _pub_plan(dash, sp: dict, busy_args, now: float, settle: bool = True) -> dic
     # --busy names a page by its slug; its name or loginId works too (a name used to be ignored silently)
     key = lambda s: re.sub(r"[^a-z0-9]", "", str(s or "").lower())
     alias = {}
-    for slug, a in accounts.items():
-        alias.update({key(slug): slug, key(a.get("name")): slug, key(a.get("loginId")): slug})
     for x in data["queue"] + scheduled + in_progress:
         for k in (x["page"], x.get("page_name"), x.get("socialpilot_login_id")):
             alias.setdefault(key(k), x["page"])
@@ -308,32 +314,49 @@ def _pub_plan(dash, sp: dict, busy_args, now: float, settle: bool = True) -> dic
     # an original whose update is already queued or scheduled must not go out after it
     updated = {x.get("update_of"): x["id"] for x in data["queue"] + scheduled if x.get("update_of")}
     superseded = [{"id": x["id"], "page": x["page"], "update": updated[x["id"]]} for x in data["queue"] if x["id"] in updated]
+    # one SocialPilot account belongs to one page: an account two pages give is used for neither
+    pages_of = {}
+    for x in data["queue"] + scheduled + in_progress:
+        if str(x.get("socialpilot_login_id") or "").strip():
+            pages_of.setdefault(str(x["socialpilot_login_id"]).strip(), set()).add(x["page"])
+    shared = {lid for lid, ps in pages_of.items() if len(ps) > 1}
     # a page with no usable account is never scheduled: its drafts fail for an editor (they used to sit
-    # in Queued forever, with only a line in the session's log)
+    # in Queued forever, with only a line in the session's log). A page that is not live (paused) is
+    # never scheduled either: its drafts wait, approved, until it is live again (/api/queue lists them
+    # under `waiting`; one that reached the queue anyway, or says its page is not live, waits too).
+    waiting = {w["id"]: w for w in data.get("waiting") or [] if w.get("id")}
+    not_live = [{"id": w["id"], "page": w.get("page"), "status": w.get("why") or "not live"} for w in waiting.values()]
     queue, no_account = [], []
     for x in data["queue"]:
         if x["id"] in updated:
             continue
-        acc = account(x)
-        lid = str(acc.get("loginId") or "")
-        if not lid and x.get("login_error"):
+        if x["id"] in waiting:
+            print(f"# {x['id']}: page {x['page']} cannot publish now ({waiting[x['id']].get('why') or 'not live'}): it waits",
+                  file=sys.stderr)
+            continue
+        if not str(x.get("socialpilot_login_id") or "").strip() and x.get("login_error"):
             print(f"# {x['id']}: could not read page {x['page']}'s SocialPilot account: tried again next run", file=sys.stderr)
             continue
-        if not lid or lid in blocked:
-            err = ("page has no SocialPilot account: set it in the admin panel, then retry" if not lid else
-                   f"page has no SocialPilot account it may use (loginId {lid} is never posted to): "
-                   "set the page's own account in the admin panel, then retry")
-            no_account.append({"id": x["id"], "page": x["page"], "error": err})
-            print(f"# {x['id']}: page {x['page']} has no usable SocialPilot account; set it in the admin panel", file=sys.stderr)
+        acc, why = page_account(x, blocked | shared)
+        if why and str(x.get("page_status") or "live").strip().lower() != "live":
+            not_live.append({"id": x["id"], "page": x["page"], "status": x.get("page_status") or "unknown"})
+            print(f"# {x['id']}: page {x['page']} is not live: it waits", file=sys.stderr)
+            continue
+        if why:
+            if str(x.get("socialpilot_login_id") or "").strip() in shared:
+                why = (f"page has no SocialPilot account it may use (loginId {x['socialpilot_login_id']} is linked to "
+                       "more than one page): press Try again on Go live to link the page's own account, then retry")
+            no_account.append({"id": x["id"], "page": x["page"], "error": why})
+            print(f"# {x['id']}: page {x['page']} has no usable SocialPilot account", file=sys.stderr)
             continue
         queue.append({**x, "socialpilot_account": acc})
     sp_state = data.get("socialpilot") or {}
     queue, waiting = split_waiting(queue, sp_state)          # SocialPilot down: tried hourly
     aud = rules.get("audience_hours") or {}
     window = (aud["timezone"], int(aud["start"]), int(aud["end"])) if aud.get("timezone") else None
-    slots = {x["id"]: x for x in plan(queue, busy, now=now, min_delay_minutes=rules.get("min_delay_minutes", 60),
-                                     min_gap_minutes=rules.get("min_gap_minutes", 45), tz=tz,
-                                     min_lead_minutes=rules.get("studio_min_lead_minutes", 60), window=window)}
+    slots = {x["id"]: x for x in plan(queue, busy, now=now, min_delay_minutes=rule_minutes(rules, "min_delay_minutes"),
+                                     min_gap_minutes=rule_minutes(rules, "min_gap_minutes"), tz=tz,
+                                     min_lead_minutes=rule_minutes(rules, "studio_min_lead_minutes"), window=window)}
     items = []
     for x in queue:
         s = slots[x["id"]]
@@ -357,6 +380,8 @@ def _pub_plan(dash, sp: dict, busy_args, now: float, settle: bool = True) -> dic
                         **({"schedule_local": local(t), "day": local(t, "%Y-%m-%d")} if t else {})})
     out = {"timezone": tz, "to_schedule": items, "superseded": superseded, "interrupted": stale,
            "scheduled_but_superseded": late, "already_scheduled": confirm, "no_account": no_account}
+    if not_live:
+        out["page_not_live"] = not_live
     if ignored:
         out["busy_ignored"] = ignored
     if sp_state.get("down"):             # SocialPilot itself (not one page's account, not one lookup)
@@ -403,14 +428,14 @@ def cmd_publish(args, cfg):
     one draft's lookup holds only that draft, and the run goes on."""
     import shutil
     import yaml
-    from .publish import (NEVER_LOGIN_IDS, breaker_trips, check_preflight, outage_error, own_message,
+    from .publish import (blocked_login_ids, breaker_trips, check_preflight, outage_error, own_message,
                           session_blocked, sp_entries, verify_queued)
     dash = _dashboard()
     if not dash:
         sys.exit("DASHBOARD_URL / ROUTINE_SECRET not set")
     root = Path(cfg["_root"])
     sp = yaml.safe_load((root / "config" / "socialpilot.yaml").read_text()) or {}
-    accounts, tz = sp.get("accounts", {}), sp.get("timezone", "Asia/Kolkata")
+    tz = sp.get("timezone", "Asia/Kolkata")
     work = root / "work"
     claims, plans = work / ".claims", work / ".plan"       # this run's claim tokens, and what each planned item is
     now = time.time()
@@ -531,6 +556,8 @@ def cmd_publish(args, cfg):
         if not item.get("schedule_utc"):
             sys.exit(f"{args.id} is not in this run's to_schedule list: run `python -m bore.cli publish plan` "
                      "and claim only its items")
+        if not login or login in blocked_login_ids(sp):     # never, whatever the plan file says
+            sys.exit(f"REFUSED {args.id}: SocialPilot account {login or '(none)'} is never posted to. Do NOT schedule it.")
         slot = _pub_utc(item["schedule_utc"])
         try:
             asked = _pub_utc(args.scheduled_for or "")
@@ -553,10 +580,8 @@ def cmd_publish(args, cfg):
                   "slot": claim.get("slot"), "claimed_at": claim.get("at")}
         if not expect["caption"]:
             sys.exit(f"{args.id} is not in this run's plan: run `python -m bore.cli publish plan` first")
-        allowed = {str(a["loginId"]) for a in accounts.values() if a.get("loginId")} \
-            | ({str(expect["login_id"])} if expect["login_id"] else set())
-        blocked = {str(b) for b in sp.get("blocked_login_ids", [])} | NEVER_LOGIN_IDS
-        v = verify_queued(sp_entries(_pub_read(args.queued, root)), expect, tz, allowed, blocked)
+        allowed = {str(expect["login_id"])} if expect["login_id"] else set()
+        v = verify_queued(sp_entries(_pub_read(args.queued, root)), expect, tz, allowed, blocked_login_ids(sp))
         e = v["entry"]
         if e is None:
             when = claim.get("slot") or (_pub_utc(item["schedule_utc"]) if item.get("schedule_utc") else
@@ -744,7 +769,7 @@ def _collect(which, apify, store, pages, cfg, hours=None) -> dict:
 
 def cmd_collect(args, cfg):
     store = _store(cfg)
-    apify, pages = _apify(cfg, store), _pages(args, cfg)
+    apify, pages = _apify(cfg, store), _pages(args, cfg, running=True)
     started = time.time()
     which = {s for s in ("x", "reddit", "web") if getattr(args, s)} or set(cfg["collection"]["hourly_sources"])
     out = _collect(which, apify, store, pages, cfg, args.hours)
@@ -752,9 +777,15 @@ def cmd_collect(args, cfg):
     print(json.dumps(out))
 
 
+def daily_posts(page, cfg) -> int:
+    """The page's hourly posts a day: its own posts_per_day (page record), never above the
+    product's ceiling (config posting.daily_cap)."""
+    return max(0, min(int(page.posts_per_day), int(cfg["posting"]["daily_cap"])))
+
+
 def page_quota(page, store, cfg, now: float, created_today: int | None = None) -> int:
-    """How many picks this run should propose so the page reaches its daily cap by the end of
-    its active hours, without exceeding it."""
+    """How many picks this run should propose so the page reaches its posts a day (daily_posts) by
+    the end of its active hours, without exceeding it."""
     from datetime import datetime
     from zoneinfo import ZoneInfo
     pc = cfg["posting"]
@@ -765,7 +796,7 @@ def page_quota(page, store, cfg, now: float, created_today: int | None = None) -
     midnight = local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
     # without the dashboard's count: this routine's own uploads (briefed or skipped stories aren't posts)
     done = store.uploaded_count(page.slug, midnight) if created_today is None else created_today
-    remaining = pc["daily_cap"] - done
+    remaining = daily_posts(page, cfg) - done
     if remaining <= 0:
         return 0
     hours_left = max(end - local.hour, 1)
@@ -791,7 +822,15 @@ def _hourly_select(args, cfg, collect: bool = True, extra_sent: dict | None = No
     from .collect import collect_web
     from .refresh import refresh
     from .select import select_page
-    store, pages = _store(cfg), _pages(args, cfg)
+    store, pages = _store(cfg), _pages(args, cfg, running=True)
+    off = sorted({p.slug for p in load_pages()} - {p.slug for p in pages}) if not getattr(args, "page", None) else []
+    if off:
+        print(f"not running for {len(off)} page(s) that are not live: {', '.join(off)}")
+    if not pages:             # nothing runs: nothing is collected or paid for, and Apify is not asked
+        import types
+        why = "no live page: nothing collected or picked"
+        print(why)
+        return store, None, types.SimpleNamespace(summary=lambda: why), [], {"pages": why}, time.time()
     sch = cfg["schedule"]
     log, why = {}, ""
     try:
@@ -1079,14 +1118,14 @@ def _routine_prepare(args, cfg, R):
         try:
             from .dupes import Deduper
             recent = dash.recent_drafts(cfg["dedup"]["suppress_hours"])
-            dedupers = {p.slug: Deduper(p, recent) for p in _pages(args, cfg)}
+            dedupers = {p.slug: Deduper(p, recent) for p in _pages(args, cfg, running=True)}
             print(f"dashboard: {len(recent)} post(s) in the last {cfg['dedup']['suppress_hours']}h checked for repeats")
         except Exception as e:
             print(f"recent posts unavailable ({e}); repeat check uses local history only")
     if dash:  # what the editors' reviews teach (rebuilt daily, sooner after a new note), before ranking
         try:
             from .lessons import refresh
-            refresh(dash, _pages(args, cfg))
+            refresh(dash, _pages(args, cfg, running=True))
         except Exception as e:
             print(f"lessons unavailable ({e}); ranking without them")
     # editors' requests first, before collection: an Apify problem (no token, a rotated one, an
@@ -1100,6 +1139,10 @@ def _routine_prepare(args, cfg, R):
             regens = dash.regen_requests()
         except Exception as e:
             print(f"regeneration requests unavailable ({e})")
+    # a page that is not live (paused, still a draft) makes nothing: its editors' requests wait for it
+    running = {p.slug for p in _pages(args, cfg, running=True)}
+    waiting = [r for r in regens if r.get("page") not in running]
+    regens = [r for r in regens if r.get("page") in running]
     for req in regens:
         d = R.write_regen_brief(run, req, cfg)
         n += 1
@@ -1113,6 +1156,10 @@ def _routine_prepare(args, cfg, R):
             links = dash.link_requests()
         except Exception as e:
             print(f"link requests unavailable ({e})")
+    waiting += [lr for lr in links if lr.get("page") not in running]
+    links = [lr for lr in links if lr.get("page") in running]
+    for w in waiting:
+        print(f"WAITS  {w.get('id')}: page {w.get('page')} is not live, so its request waits until it is")
     if links:
         from .linkpost import write_link_brief
         try:          # the Reddit actor is only a last way to read a Reddit link
@@ -1379,11 +1426,25 @@ def _spec_art_or_exit(d, cfg) -> None:
                  f"art): draw it with `routine fallback {d}`")
 
 
+def premium_per_day(slug: str) -> int:
+    """The page's premium cards a UTC day (its record's premium_per_day, from `studio sync`). A page
+    this machine does not know gets none: its cards are the safe card."""
+    page = next((p for p in load_pages() if p.slug == slug), None)
+    return page.premium_per_day if page else 0
+
+
 def _routine_krea_request(args, cfg, R):
     d = _routine_dir(args, R)
     _lint_or_exit(d, cfg, R)
     _spec_art_or_exit(d, cfg)
     store, cap = _store(cfg), cfg["krea"]["monthly_max_images"]
+    # the page's own premium cards a day, before anything is reserved (the dashboard counts it too,
+    # with Studio's: this is the routine's own count, which holds when the dashboard does not answer)
+    slug = json.loads((d / "brief.json").read_text()).get("page") or ""
+    page_cap, page_today = premium_per_day(slug), R.krea_page_today(store, slug)
+    if page_today >= page_cap:
+        sys.exit(f"KREA PACE: {page_today}/{page_cap} premium cards today for page {slug or '?'} (its premium_per_day). "
+                 f"Use `bore routine fallback {args.dir}`.")
     # one allowance for the hourly routine and Studio, kept by the dashboard (a Studio session has no
     # ledger of its own: its images would never count); the hourly routine also sends what its ledger
     # counted. Without the dashboard, only the hourly routine may go on, on its own ledger.
@@ -1396,7 +1457,7 @@ def _routine_krea_request(args, cfg, R):
         if not dash:
             raise ConnectionError("DASHBOARD_URL / ROUTINE_SECRET not set")
         got = dash.krea_reserve("studio" if studio else "hourly", cap, _krea_key(d),
-                                None if studio else _krea_ledger(store, cap, cfg))
+                                None if studio else _krea_ledger(store, cap, cfg), page=slug, page_cap=page_cap)
         used, today, allowed = got["used"], got["today"], got["allowed"]
         if not studio:
             _krea_studio_known(store, got)
@@ -1421,7 +1482,8 @@ def _routine_krea_request(args, cfg, R):
         if today >= allowed:
             sys.exit(f"KREA PACE: {today}/{allowed} Krea images today (the month's {cap} are spread over its days). "
                      f"Use `bore routine fallback {args.dir}`.")
-    print(f"# Krea images this month: {used}/{cap}, today {today}/{allowed}. Send this through the Krea connector (generate_image):")
+    print(f"# Krea images this month: {used}/{cap}, today {today}/{allowed}; page {slug}: {page_today}/{page_cap} today. "
+          "Send this through the Krea connector (generate_image):")
     print(json.dumps(req, indent=1, ensure_ascii=False))
 
 
@@ -1438,11 +1500,15 @@ def _krea_made(d: Path, cfg, R, key: str, before: set) -> None:
     said to be made stops counting after 45 minutes, and the run says so on the admin's Health tab."""
     if not (_krea_urls(d) - before):
         return
+    slug = json.loads((d / "brief.json").read_text()).get("page") or ""
+    if not _krea_studio(d, R):        # the page's premium cards today (premium_per_day), this routine's count
+        R.krea_page_made(_store(cfg), slug)
     dash = _dashboard()
     if not dash:
         return
     try:
-        dash.krea_reserve("studio" if _krea_studio(d, R) else "hourly", cfg["krea"]["monthly_max_images"], key, made=True)
+        dash.krea_reserve("studio" if _krea_studio(d, R) else "hourly", cfg["krea"]["monthly_max_images"], key, made=True,
+                          page=slug)
     except Exception as e:
         print(f"{_krea_unavailable(e)}: the shared count was not told this image was made. Carry on with the card.")
 
@@ -1642,8 +1708,8 @@ STORY_FAULT_RX = re.compile(
 
 def photo_only(reason: str) -> bool:
     """A skip reason about the photo and nothing else ("no sharp photo of X found"). The routine
-    almost never passed --photo: no story was ever retried, while Huddle skipped about 14 stories a
-    day (Oct 9-13) only for the photo, many of them injury news it called good."""
+    almost never passed --photo: no story was ever retried, while a sports page skipped about 14
+    stories a day only for the photo, many of them injury news it called good."""
     return bool(PHOTO_RX.search(reason or "")) and not STORY_FAULT_RX.search(reason or "")
 
 
@@ -1830,8 +1896,6 @@ def cmd_studio(args, cfg):
     from .routine import WORK, latest_run_dir, new_run_dir
     if args.step == "sync":
         S.sync()
-    elif args.step == "export-pages":
-        print("stored:", ", ".join(S.export_pages()))
     elif args.step == "feed":
         _restored_or_exit(args, cfg, "studio feed")      # the stories the hourly routine collected
         require(NEEDS["images"], "studio feed")          # never a feed with the photo checks silently off
@@ -1883,7 +1947,7 @@ def cmd_studio(args, cfg):
 def cmd_refresh(args, cfg):
     from .refresh import refresh
     store = _store(cfg)
-    print(json.dumps(refresh(_apify(cfg, store), store, _pages(args, cfg), cfg)))
+    print(json.dumps(refresh(_apify(cfg, store), store, _pages(args, cfg, running=True), cfg)))
 
 
 def _select_all(store, pages, cfg, now):
@@ -1915,7 +1979,7 @@ def _escalate(store, apify, results, cfg) -> list[str]:
 def cmd_cluster(args, cfg):
     from .select import to_json
     store, now = _store(cfg), time.time()
-    results = _select_all(store, _pages(args, cfg), cfg, now)
+    results = _select_all(store, _pages(args, cfg, running=True), cfg, now)
     data = [to_json(r) for _, r in results]
     path = resolve(cfg, cfg["output_dir"]) / f"cluster-{datetime.now():%Y%m%d-%H%M}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1931,14 +1995,14 @@ def cmd_cluster(args, cfg):
 def cmd_escalate(args, cfg):
     store, now = _store(cfg), time.time()
     apify = _apify(cfg, store)
-    done = _escalate(store, apify, _select_all(store, _pages(args, cfg), cfg, now), cfg)
+    done = _escalate(store, apify, _select_all(store, _pages(args, cfg, running=True), cfg, now), cfg)
     print("escalated: " + (", ".join(done) or "none needed"))
 
 
 def cmd_brief(args, cfg):
     from .render import render
     from .select import record_briefed
-    store, pages = _store(cfg), _pages(args, cfg)
+    store, pages = _store(cfg), _pages(args, cfg, running=True)
     apify = None if args.offline else _apify(cfg, store)
     if apify and not args.no_collect:
         print("collect:", json.dumps(_collect(set(cfg["collection"]["brief_sources"]), apify, store, pages, cfg)))
@@ -2060,7 +2124,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=cmd_routine)
 
     s = sub.add_parser("studio", help="Post Studio side of the routines (see STUDIO.md)")
-    s.add_argument("step", choices=["sync", "export-pages", "feed", "feed-publish", "jobs", "images", "done", "fail", "precheck",
+    s.add_argument("step", choices=["sync", "feed", "feed-publish", "jobs", "images", "done", "fail", "precheck",
                                     "template-send"])
     s.add_argument("--send", action="store_true", help="precheck: send the check.json results")
     s.add_argument("dir", nargs="?", help="images/fail: a post folder (work/studio/<job>/<post>); done: a job folder; "

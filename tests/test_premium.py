@@ -22,7 +22,7 @@ def post(tmp_path):
     d = tmp_path / "p"
     (d / "photos").mkdir(parents=True)
     (d / "photos" / "0.jpg").write_bytes(_jpeg())
-    brief = {"id": "p", "page": "huddle", "page_name": "Huddle Room",
+    brief = {"id": "p", "page": "demo-sports", "page_name": "Demo Sports",
              "photos": [{"index": 0, "file": "photos/0.jpg", "url": "https://cdn.example.com/a.jpg",
                          "source": "news", "credit": "www.sportsdesk.example"}]}
     copy = {"template": "report", "headline_lines": ["ALLEN'S WIN CHASE"], "stat_value": "102",

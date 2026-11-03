@@ -40,7 +40,7 @@ MIN_NAMES, MIN_WORDS, MANY_NAMES = 2, 3, 5
 
 def _team_tokens() -> set[str]:
     try:
-        from .cards import NFL_TEAMS
+        from .teams import NFL_TEAMS
     except Exception:  # pragma: no cover
         return set()
     return {t for k in NFL_TEAMS for t in token_set(k)}
@@ -53,7 +53,7 @@ GENERIC = _team_tokens() | {"nfl", "mnf", "snf", "tnf", "nba", "mlb", "nhl", "uf
 
 
 def _cities():
-    from .cards import NFL_CITIES, NFL_TEAMS
+    from .teams import NFL_CITIES, NFL_TEAMS
     before_team = re.compile(rf"\b(?:{'|'.join(NFL_CITIES)})(?=\s+(?:{'|'.join(NFL_TEAMS)})\b)", re.I)
     return before_team, token_set(" ".join(NFL_CITIES))
 

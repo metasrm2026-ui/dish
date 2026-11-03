@@ -20,7 +20,7 @@ from test_studio_typing import PW, ROUTINE, browser, server  # noqa: F401  (the 
 
 pytest.importorskip("pypdfium2")
 SLUG = "dummy-sports"          # dev/server.mjs's page
-SPEC = json.loads((Path(__file__).parent / "fixtures" / "tspec" / "tally-tower.json").read_text())
+SPEC = json.loads((Path(__file__).parent / "data" / "tspec" / "tally-tower.json").read_text())
 
 
 def signed_in(browser, server, email):  # noqa: F811
@@ -168,7 +168,8 @@ def test_the_ideas_and_visual_steps_show_the_chosen_templates_preview_without_fe
         const r = await fetch(path, { method, body: body === null ? undefined : JSON.stringify(body),
           headers: { 'content-type': 'application/json', ...(auth ? { authorization: 'Bearer ' + auth } : {}) } });
         return { status: r.status, body: await r.json().catch(() => null) }; }""", [method, path, body, ROUTINE if routine else None])
-    pic = base64.b64encode((Path(__file__).parent.parent / "docs" / "samples" / "huddle-giants-qb-template.jpg").read_bytes()).decode()
+    from test_tspec import _busy_photo
+    pic = base64.b64encode(_busy_photo(600, 750)).decode()
     r = call("POST", "/api/routine/templates", {"page": SLUG, "job": "", "doc_version": 1, "doc_pages": [1],
                                                "spec": {**SPEC, "id": "t9", "name": "Made-up Thumb"}, "preview_b64": pic,
                                                "pages": [{"n": 1, "image_b64": pic}]}, True)

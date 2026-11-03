@@ -30,8 +30,43 @@ import time
 from datetime import datetime, timedelta, timezone, tzinfo
 from zoneinfo import ZoneInfo
 
-# The owner's rule, whatever config/socialpilot.yaml says: "Keaton Caleb" is never posted to.
-NEVER_LOGIN_IDS = frozenset({"2662937"})
+
+# The scheduling rules' floors, whatever config/socialpilot.yaml says (it may only ask for more):
+# an hour after approval, 45 minutes apart per page, a Studio time at least an hour out.
+SAFE_MINUTES = {"min_delay_minutes": 60, "min_gap_minutes": 45, "studio_min_lead_minutes": 60}
+
+
+def rule_minutes(rules: dict, name: str) -> int:
+    """A scheduling rule in minutes: the config's, never below its floor (SAFE_MINUTES)."""
+    try:
+        asked = int((rules or {}).get(name, SAFE_MINUTES[name]))
+    except (TypeError, ValueError):
+        asked = SAFE_MINUTES[name]
+    return max(asked, SAFE_MINUTES[name])
+
+
+def blocked_login_ids(sp: dict) -> frozenset[str]:
+    """The SocialPilot accounts never posted to, whatever a page record says: config/socialpilot.yaml
+    blocked_login_ids (also read under `deny`): another deployment's pages and personal accounts."""
+    return frozenset(str(x).strip() for k in ("blocked_login_ids", "deny") for x in (sp or {}).get(k) or [] if str(x).strip())
+
+
+def page_account(item: dict, blocked: frozenset[str] | set[str]) -> tuple[dict, str]:
+    """(account, why not) for a queued draft. The publisher posts only to the account the onboarding
+    routine linked to the draft's page (its record's socialpilot_login_id, which /api/queue gives with
+    every item), and only while the page is live: /api/queue lists a page that is not live under
+    `waiting`, never in its queue, and an item that says its page_status is something else is refused
+    here too. A blocked account is refused always."""
+    status = str(item.get("page_status") or "live").strip().lower()
+    if status != "live":
+        return {}, f"page is {status}, not live: its posts wait until it is live again"
+    lid = str(item.get("socialpilot_login_id") or "").strip()
+    if not lid:
+        return {}, "page has no SocialPilot account: press Try again on Go live (the onboarding links it), then retry"
+    if lid in blocked:
+        return {}, (f"page has no SocialPilot account it may use (loginId {lid} is never posted to): "
+                    "press Try again on Go live to link the page's own account, then retry")
+    return {"name": item.get("page_name") or item["page"], "loginId": int(lid) if lid.isdigit() else lid}, ""
 
 
 def _round_up(ts: float, minutes: int = 5) -> float:
@@ -58,7 +93,8 @@ def plan(queue: list[dict], busy: dict[str, list[float]], now: float | None = No
     window: hourly-routine posts only go out inside it (tz, start hour, end hour).
     Returns [{id, page, at (unix), local ("YYYY-MM-DD HH:mm" in tz), iso_utc}] in the same order."""
     now = now or time.time()
-    gap, delay, lead = min_gap_minutes * 60, min_delay_minutes * 60, min_lead_minutes * 60
+    rules = {"min_delay_minutes": min_delay_minutes, "min_gap_minutes": min_gap_minutes, "studio_min_lead_minutes": min_lead_minutes}
+    gap, delay, lead = (rule_minutes(rules, k) * 60 for k in ("min_gap_minutes", "min_delay_minutes", "studio_min_lead_minutes"))
     taken = {p: sorted(v) for p, v in busy.items()}
     out = []
     studio = sorted((q for q in queue if q.get("requested_at")), key=lambda q: q["requested_at"])
@@ -114,7 +150,7 @@ def _slot(item: dict, t: float, tz: str) -> dict:
 
 
 def parse_busy(values: list[str], tz: str = "Asia/Kolkata") -> dict[str, list[float]]:
-    """--busy 'huddle=2026-09-26 21:00' (SocialPilot local time) -> {page: [unix]}"""
+    """--busy 'demo-page=2026-09-26 21:00' (SocialPilot local time) -> {page: [unix]}"""
     out: dict[str, list[float]] = {}
     for v in values or []:
         page, _, when = v.partition("=")
@@ -358,7 +394,7 @@ def verify_queued(entries: list[dict], expect: dict, tz: str, allowed: set[str],
         altered = bool(mine)
     if not mine:
         return {"entry": None, "copies": 0, "problems": [], "stop": False, "wrong_account": False, "sp_time": None}
-    bad = lambda lid: lid in blocked or lid in NEVER_LOGIN_IDS or bool(allowed and lid not in allowed) or bool(login and lid != login)
+    bad = lambda lid: lid in blocked or bool(allowed and lid not in allowed) or bool(login and lid != login)
     ours = [e for e in mine if not bad(str(e.get("loginId") or ""))]
     others = [e for e in mine if e not in ours]
     entry = ours[0] if ours else mine[0]

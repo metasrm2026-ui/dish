@@ -1,7 +1,7 @@
 """Real stills of the viral video a story is about, and the image other outlets used.
 
-Culture Rush's articles often lead with a stock or file photo (a generic tiger close-up for the
-tiger attack, a Getty file photo for Blueface's proposal), while every other outlet used a still of
+A celebrity page's articles often lead with a stock or file photo (a generic animal close-up for an
+animal attack, an agency file photo for a proposal), while every other outlet used a still of
 the actual video. Those videos are usually in the article itself: the X posts it embeds (and the
 posts they quote or reply to). This module finds them for free (the public embed endpoint), groups
 copies of the same frame posted by different accounts (consensus), samples sharp frames from the

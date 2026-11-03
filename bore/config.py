@@ -60,6 +60,16 @@ class Page:
     web_rotation: list[str] = field(default_factory=list)         # a few extra searches per web pass
     priority_terms_file: str = ""   # YAML with `priority_terms`: names that earn a small score boost
     hourly: bool = True             # the hourly routine makes posts for the approval queue (else Studio only)
+    # the product's page record (dashboard pages/<slug>, brought by `studio sync`)
+    workspace: str = ""
+    status: str = "draft"           # draft | going_live | live | paused | failed: only a live page runs
+    posts_per_day: int = 10         # the hourly posts a day at most (the super sets the ceiling)
+    premium_per_day: int = 6        # premium (image model) cards a UTC day at most; then the safe card
+    socialpilot_login_id: str = ""  # set only by the onboarding routine; the only account it posts to
+
+    @property
+    def live(self) -> bool:
+        return self.status == "live"
 
     @classmethod
     def from_dict(cls, d: dict) -> "Page":
@@ -73,6 +83,10 @@ class Page:
                                     if h.lower().lstrip("@") not in page.x_handles]
         page.subreddits_rotation = [s.lower().removeprefix("r/") for s in page.subreddits_rotation]
         page.timezone = _page_zone(page)
+        page.status = str(page.status or "draft").strip().lower()
+        page.posts_per_day = _count(page.posts_per_day, cls.__dataclass_fields__["posts_per_day"].default)
+        page.premium_per_day = _count(page.premium_per_day, cls.__dataclass_fields__["premium_per_day"].default)
+        page.socialpilot_login_id = str(page.socialpilot_login_id or "").strip()
         return page
 
     def to_dict(self) -> dict:
@@ -80,6 +94,16 @@ class Page:
 
 
 DEFAULT_TIMEZONE = Page.__dataclass_fields__["timezone"].default
+PAGE_STATUSES = ("draft", "going_live", "live", "paused", "failed")
+
+
+def _count(value, default: int) -> int:
+    """A budget from the page record: a whole number from 0 up; anything else is the default."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return default
+    return n if n >= 0 else default
 
 
 def _page_zone(page: Page) -> str:

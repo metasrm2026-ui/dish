@@ -106,7 +106,7 @@ def test_stills_ranked_with_flags(monkeypatch):
 
 def test_lint_refuses_flagged_photos_and_takes_720_for_frames():
     from bore.guard import lint
-    brief = {"page": "huddle", "posts": [{"text": "Jeanty ran for 120 yards."}], "verification": {"route": "corroborated"},
+    brief = {"page": "demo-sports", "posts": [{"text": "Jeanty ran for 120 yards."}], "verification": {"route": "corroborated"},
              "photos": [{"size": "1280x720", "file": "photos/0.jpg", "note": "video frame", "flags": []},
                         {"size": "1600x1200", "file": "photos/1.jpg", "flags": ["scoreboard"]}]}
     copy = {"niche_fit": 9, "template": "report", "headline_lines": ["JEANTY", "RUNS WILD"], "photo_index": 0,

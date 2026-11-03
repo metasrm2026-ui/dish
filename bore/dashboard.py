@@ -155,7 +155,8 @@ def _restore(body: bytes, path: Path) -> dict[str, int]:
 
 
 class KreaRefused(Exception):
-    """The shared Krea allowance has no image left this month (CAP) or today (PACE)."""
+    """The shared Krea allowance has no image left this month (CAP) or today (PACE: the month's
+    share for today, or the page's own premium cards a day)."""
 
 
 class Dashboard:
@@ -226,15 +227,19 @@ class Dashboard:
         return out
 
     def krea_reserve(self, who: str, cap: int, key: str | None = None, ledger: dict | None = None,
-                     report_only: bool = False, made: bool = False) -> dict:
+                     report_only: bool = False, made: bool = False, page: str | None = None,
+                     page_cap: int | None = None) -> dict:
         """Reserve one Krea image in the month's shared allowance (hourly routine and Studio), or with
         report_only only send the hourly routine's ledger: {hourly_used, hourly_today, month, day}, as
         counted; with made, say the image reserved with this key was made (a reservation never said to
         be made stops counting after 45 minutes; a reservation says `confirms`, or it counts as made
         whatever happens to it). Raises KreaRefused with the dashboard's KREA
         CAP/PACE/UNCHECKED message when it says no. An ask with a key (or a report) means the same
-        however often it arrives: sent once more when its answer is lost or the dashboard is busy."""
+        however often it arrives: sent once more when its answer is lost or the dashboard is busy.
+        page / page_cap: the page the image is for and its premium cards a UTC day (premium_per_day):
+        past it the dashboard says KREA PACE for that page, whatever the month has left."""
         body = {"who": who, "cap": cap, **({"key": key} if key else {}), **(ledger or {}),
+                **({"page": page} if page else {}), **({"page_cap": int(page_cap)} if page_cap is not None else {}),
                 **({"report_only": True} if report_only else {}), **({"made": True} if made else {}),
                 **({} if report_only or made else {"confirms": True})}
         for wait in (3, None):

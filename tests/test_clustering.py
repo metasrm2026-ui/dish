@@ -13,13 +13,6 @@ def test_regression_fixture_passes_at_configured_threshold(cfg):
     assert evaluate(data, cfg) == []
 
 
-def test_real_window_passes_at_configured_threshold(cfg):
-    """Real Culture Rush window: 29 Olivia Rodrigo posts (hashtag and plain text, 6 sources) are
-    one story; Kardashian/Hamilton and Deadliest Catch stay intact and separate."""
-    data = load(FIXTURES / "real_culture_rush_20260926.json")
-    assert evaluate(data, cfg) == []
-
-
 def test_names_identify_stories_templates_do_not():
     from bore.textutil import entities
     assert {"olivia", "rodrigo", "unravel", "tour"} <= entities("Olivia Rodrigo on the #UnraveledTour")

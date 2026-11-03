@@ -37,8 +37,8 @@ def prefilter_rules(page: Page) -> tuple[list, list]:
 
 
 # Topics a page's playbook rules out in its worth_posting "NO:" list, keyed by the word that list
-# uses. The routine skipped every such story it was ever briefed on (to Oct 13: 58 Culture Rush
-# politics and storm stories, 12 Huddle show plugs; none posted), so they leave before briefing.
+# uses. The routine skipped every such story it was ever briefed on (politics and storm stories on
+# a celebrity page, show plugs on a sports page; none posted), so they leave before briefing.
 # Only the headline is tested. Politics means institutions, elections, courts, enforcement and wars:
 # a politician's name alone never counts, since a star clashing with a politician is a kind editors
 # approve (the routine judges those).
@@ -104,7 +104,7 @@ def excluded_topic(headline: str, text: str, topics: dict, prio_rx: list) -> str
 
 
 def _nfl_rx() -> re.Pattern:
-    from .cards import NFL_TEAMS
+    from .teams import NFL_TEAMS
     teams = "|".join(sorted((re.escape(k) for k in NFL_TEAMS), key=len, reverse=True))
     # a story often names only the player ("Jeanty limited in practice"): injury and roster words count
     return re.compile(r"\b(nfl|football|quarterbacks?|qbs?|touchdowns?|tds?|super bowl|linebackers?|wide receivers?|"
@@ -126,8 +126,8 @@ OFF_NICHE_WEB_RX = re.compile(
 
 def off_niche_web(members: list[dict]) -> bool:
     """An NFL page's web search results about something else (storms, markets, politics, other
-    sports): no football word or team in them, and a sign of what they are about instead (Huddle
-    Oct 10-13: 15 such briefs, all skipped). A play or a coach's quote often names only the people
+    sports): no football word or team in them, and a sign of what they are about instead (such
+    briefs were all skipped). A play or a coach's quote often names only the people
     ("Joe Example dots Sam Example from DEEP"), so no football word alone is not enough."""
     if not members or any(m.get("platform") != "web" for m in members):
         return False
@@ -308,8 +308,8 @@ def website_only(page: Page) -> bool:
 
 def window_hours(page: Page, cfg: dict) -> float:
     """How far back a page's stories stay candidates. A website-only page gets a few articles an
-    hour and the routine decides every brief, so its pool ran dry by evening (Culture Rush Oct 12:
-    48 candidates at 11:30 UTC, 1 at 22:00) while articles from earlier in the day had aged out of
+    hour and the routine decides every brief, so its pool ran dry by evening (48 candidates in the
+    morning, 1 at night) while articles from earlier in the day had aged out of
     the 12-hour window unbriefed: it keeps the day's unbriefed articles."""
     c = cfg["clustering"]
     hours = c.get("website_window_hours", c["window_hours"]) if website_only(page) else c["window_hours"]

@@ -2,7 +2,7 @@
 editors' new templates were only ever text for the ideas step, and Studio drew the nearest coded
 layout instead of the template they chose). The conversion job's files (STUDIO.md TEMPLATES), the
 approved specs `studio sync` writes, the ideas that name them, and the card drawn with the chosen one
-on the editor's photo. Every spec here is made up (tests/fixtures/tspec/); the pages' own are
+on the editor's photo. Every spec here is made up (tests/data/tspec/); the pages' own are
 confidential."""
 import base64
 import io
@@ -17,7 +17,7 @@ from PIL import Image
 from bore import cli, ops, tspec
 from bore import studio as S
 
-FIX = Path(__file__).parent / "fixtures" / "tspec"
+FIX = Path(__file__).parent / "data" / "tspec"
 RAW = {p.stem: json.loads(p.read_text()) for p in FIX.glob("*.json")}
 THEME = {"accent": "#ffcc00", "bg": "#101a2c", "ink": "#ffffff", "logo_text": "Demo Page"}
 
@@ -470,5 +470,5 @@ def test_no_template_name_fixed_text_or_id_reaches_a_run_report(home, monkeypatc
     for spec_path in (str(jd / "t7" / "spec.json"), "work/studio/demo-1-ab/t7/spec.json"):
         args = type("A", (), {"cmd": "routine", "step": "tspec-render", "dir": spec_path})()
         assert ops.target_of(args) == str(Path(spec_path).parent.parent), spec_path
-    args = type("A", (), {"cmd": "routine", "step": "tspec-render", "dir": "tests/fixtures/tspec/tally-tower.json"})()
-    assert ops.target_of(args) == "tests/fixtures/tspec/tally-tower.json", "a spec outside a templates job: as it is"
+    args = type("A", (), {"cmd": "routine", "step": "tspec-render", "dir": "tests/data/tspec/tally-tower.json"})()
+    assert ops.target_of(args) == "tests/data/tspec/tally-tower.json", "a spec outside a templates job: as it is"

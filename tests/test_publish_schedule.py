@@ -20,22 +20,27 @@ NOW = 1_790_430_000  # fixed clock
 
 # what the SocialPilot connector answers (shapes from real calls, trimmed)
 ACCOUNTS = {"success": True, "message": "Accounts list displayed successfully.", "accounts": [
-    {"platform": "Facebook", "isReconnect": False, "accountUsername": "Culture Rush", "loginId": 2662938},
-    {"platform": "Facebook", "isReconnect": False, "accountUsername": "Huddle Room", "loginId": 2662936},
-    {"platform": "Facebook", "isReconnect": False, "accountUsername": "Keaton Caleb", "loginId": 2662937}]}
+    {"platform": "Facebook", "isReconnect": False, "accountUsername": "Demo Celeb", "loginId": 9100002},
+    {"platform": "Facebook", "isReconnect": False, "accountUsername": "Demo Sports", "loginId": 9100001},
+    {"platform": "Facebook", "isReconnect": False, "accountUsername": "Personal Account", "loginId": 9100009}]}
 USERINFO = {"success": True, "message": "User info retrieved successfully", "data": {"setting": {"timeZone": "Asia/Kolkata"}}}
 LOCKED = {"success": False, "message": "Your Account is Locked", "accounts": [], "limit": 50, "page": 1, "totalAccount": 0, "totalPages": 0}
-NAMES = {"huddle": "Huddle Room", "culture-rush": "Culture Rush"}
+NAMES = {"demo-sports": "Demo Sports", "demo-celeb": "Demo Celeb"}
+# each live page's own SocialPilot account, as the onboarding routine linked it (pages/<slug>)
+LOGINS = {"demo-sports": "9100001", "demo-celeb": "9100002"}
+BLOCKED = "9100009"           # a personal account: on the test config's blocked list
 
 
-def _draft(draft_id, page="huddle", **kw):
-    """An approved draft as /api/queue lists it (dashboard/routes/queue.js)."""
+def _draft(draft_id, page="demo-sports", **kw):
+    """An approved draft as /api/queue lists it (dashboard/routes/queue.js): a live page's (a page that
+    is not live is listed under `waiting` instead)."""
     now = int(time.time())
     return {"id": draft_id, "page": page, "page_name": NAMES.get(page, page), "status": "approved",
             "approved_at": now - 600, "first_approved_at": now - 600, "holds": 0, "held_error": "",
             "caption": f"Caption {draft_id}", "image_url": f"https://blob.example/{draft_id}.jpg",
             "image_urls": [f"https://blob.example/{draft_id}.jpg"], "requested_at": None, "mode": None, "studio": False,
-            "socialpilot_login_id": "", "update_of": None, "created_at": None, "ever_sent": False, "prior_post_id": None, **kw}
+            "socialpilot_login_id": LOGINS.get(page, ""), "update_of": None, "created_at": None,
+            "ever_sent": False, "prior_post_id": None, **kw}
 
 
 class FakeDash:
@@ -115,43 +120,45 @@ class Pub:
 def pub(tmp_path, monkeypatch):
     from bore import cli
     (tmp_path / "config").mkdir()
-    (tmp_path / "config" / "socialpilot.yaml").write_text((ROOT / "config" / "socialpilot.yaml").read_text())
+    sp = re.sub(r"(?m)^blocked_login_ids:.*$", f"blocked_login_ids: [{BLOCKED}]",
+                (ROOT / "config" / "socialpilot.yaml").read_text())
+    (tmp_path / "config" / "socialpilot.yaml").write_text(sp)
     dash = FakeDash()
     monkeypatch.setattr(cli, "_dashboard", lambda: dash)
     return Pub(tmp_path, dash)
 
 
 def test_at_least_an_hour_after_approval():
-    [p] = plan([{"id": "a", "page": "huddle", "approved_at": NOW}], {}, now=NOW)
+    [p] = plan([{"id": "a", "page": "demo-sports", "approved_at": NOW}], {}, now=NOW)
     assert p["at"] >= NOW + 3600 and p["at"] % 300 == 0
 
 
 def test_two_approved_together_are_45_minutes_apart():
-    q = [{"id": "a", "page": "huddle", "approved_at": NOW}, {"id": "b", "page": "huddle", "approved_at": NOW + 5}]
+    q = [{"id": "a", "page": "demo-sports", "approved_at": NOW}, {"id": "b", "page": "demo-sports", "approved_at": NOW + 5}]
     a, b = plan(q, {}, now=NOW)
     assert 2700 <= b["at"] - a["at"] < 3600
 
 
 def test_other_pages_do_not_block_each_other():
-    q = [{"id": "a", "page": "huddle", "approved_at": NOW}, {"id": "b", "page": "culture-rush", "approved_at": NOW}]
+    q = [{"id": "a", "page": "demo-sports", "approved_at": NOW}, {"id": "b", "page": "demo-celeb", "approved_at": NOW}]
     a, b = plan(q, {}, now=NOW)
     assert a["at"] == b["at"]
 
 
 def test_existing_scheduled_posts_are_respected_both_sides():
     t = NOW + 3600 + 600
-    [p] = plan([{"id": "a", "page": "huddle", "approved_at": NOW}], {"huddle": [t]}, now=NOW)
+    [p] = plan([{"id": "a", "page": "demo-sports", "approved_at": NOW}], {"demo-sports": [t]}, now=NOW)
     assert abs(p["at"] - t) >= 2700
 
 
 def test_old_approval_still_waits_an_hour_from_now():
-    [p] = plan([{"id": "a", "page": "huddle", "approved_at": NOW - 5 * 3600}], {}, now=NOW)
+    [p] = plan([{"id": "a", "page": "demo-sports", "approved_at": NOW - 5 * 3600}], {}, now=NOW)
     assert p["at"] >= NOW + 3600
 
 
 def test_busy_times_in_socialpilot_timezone():
-    b = parse_busy(["huddle=2026-09-26 21:00"], "Asia/Kolkata")
-    [p] = plan([{"id": "a", "page": "huddle", "approved_at": b["huddle"][0] - 3600}], b, now=b["huddle"][0] - 3600)
+    b = parse_busy(["demo-sports=2026-09-26 21:00"], "Asia/Kolkata")
+    [p] = plan([{"id": "a", "page": "demo-sports", "approved_at": b["demo-sports"][0] - 3600}], b, now=b["demo-sports"][0] - 3600)
     assert p["local"] == "2026-09-26 21:45"   # 45 minutes after the post already at 21:00
 
 
@@ -164,8 +171,23 @@ def test_studio_posts_keep_the_editors_time():
     out = {x["id"]: x["at"] for x in plan(q, {}, now=now)}
     assert out["studio"] == now + 3 * 3600          # exactly as chosen
     assert out["now"] == now + 3600                 # never sooner than an hour from now (owner's rule)
-    assert plan(q[2:], {}, now=now, min_lead_minutes=10)[0]["at"] == now + 600   # when the owner lowers it
+    assert plan(q[2:], {}, now=now, min_lead_minutes=90)[0]["at"] == now + 5400  # the config may ask for more
     assert out["auto"] >= now + 3600 and all(abs(out["auto"] - out[k]) >= 45 * 60 for k in ("studio", "now"))
+
+
+def test_the_scheduling_rules_never_go_below_an_hour_and_45_minutes():
+    """A config (or a caller) asking for less than the safety rules gets the rules: an hour after
+    approval, 45 minutes apart per page, a Studio time at least an hour out."""
+    from bore.publish import SAFE_MINUTES, plan, rule_minutes
+    now = 1_800_000_000
+    assert SAFE_MINUTES == {"min_delay_minutes": 60, "min_gap_minutes": 45, "studio_min_lead_minutes": 60}
+    q = [{"id": "a", "page": "p", "approved_at": now}, {"id": "b", "page": "p", "approved_at": now},
+         {"id": "s", "page": "q", "approved_at": now, "requested_at": (now + 600) * 1000}]
+    a, b, s = sorted(plan(q, {}, now=now, min_delay_minutes=0, min_gap_minutes=1, min_lead_minutes=0), key=lambda x: x["id"])
+    assert a["at"] >= now + 3600 and abs(b["at"] - a["at"]) >= 45 * 60 and s["at"] >= now + 3600
+    assert rule_minutes({"min_gap_minutes": 5}, "min_gap_minutes") == 45
+    assert rule_minutes({"min_gap_minutes": "x"}, "min_gap_minutes") == 45
+    assert rule_minutes({"min_delay_minutes": 120}, "min_delay_minutes") == 120
 
 
 def test_studio_time_in_the_past_moves_to_now():
@@ -179,23 +201,23 @@ def test_studio_posts_whose_time_passed_keep_the_gap():
     """Held or retried Studio posts whose chosen time passed used to get now+60 each, without a look
     at the page's other posts: two in the same minute, minutes from a post already scheduled."""
     now = 1_800_000_000
-    q = [{"id": "s1", "page": "huddle", "approved_at": now - 3 * 3600, "requested_at": (now - 3 * 3600) * 1000, "holds": 1},
-         {"id": "s2", "page": "huddle", "approved_at": now - 2 * 3600, "requested_at": (now - 2 * 3600) * 1000, "holds": 1},
-         {"id": "h1", "page": "huddle", "approved_at": now - 600}]
-    busy = {"huddle": [now + 65 * 60]}
+    q = [{"id": "s1", "page": "demo-sports", "approved_at": now - 3 * 3600, "requested_at": (now - 3 * 3600) * 1000, "holds": 1},
+         {"id": "s2", "page": "demo-sports", "approved_at": now - 2 * 3600, "requested_at": (now - 2 * 3600) * 1000, "holds": 1},
+         {"id": "h1", "page": "demo-sports", "approved_at": now - 600}]
+    busy = {"demo-sports": [now + 65 * 60]}
     out = {x["id"]: x["at"] for x in plan(q, busy, now=now)}
-    times = sorted(list(out.values()) + busy["huddle"])
+    times = sorted(list(out.values()) + busy["demo-sports"])
     assert all(b - a >= 45 * 60 for a, b in zip(times, times[1:])), times
     assert min(out.values()) >= now + 3600                          # never sooner than an hour from now
     assert out["s1"] < out["s2"]                                     # the older request first
     # "Post now" is the earliest free slot too, even while its time (an hour from the Send) is ahead
-    nowq = [{"id": "n", "page": "huddle", "approved_at": now, "requested_at": (now + 3700) * 1000, "mode": "now"}]
-    [n] = plan(nowq, {"huddle": [now + 3600]}, now=now)
+    nowq = [{"id": "n", "page": "demo-sports", "approved_at": now, "requested_at": (now + 3700) * 1000, "mode": "now"}]
+    [n] = plan(nowq, {"demo-sports": [now + 3600]}, now=now)
     assert n["at"] >= now + 3600 + 45 * 60
     # an editor's own pick is kept as given, and the system's slots move around it
-    pick = [{"id": "e", "page": "huddle", "approved_at": now, "requested_at": (now + 2 * 3600) * 1000, "mode": "schedule"},
-            {"id": "n", "page": "huddle", "approved_at": now, "requested_at": (now - 60) * 1000, "mode": "now"}]
-    out = {x["id"]: x["at"] for x in plan(pick, {"huddle": [now + 2 * 3600 + 600]}, now=now)}
+    pick = [{"id": "e", "page": "demo-sports", "approved_at": now, "requested_at": (now + 2 * 3600) * 1000, "mode": "schedule"},
+            {"id": "n", "page": "demo-sports", "approved_at": now, "requested_at": (now - 60) * 1000, "mode": "now"}]
+    out = {x["id"]: x["at"] for x in plan(pick, {"demo-sports": [now + 2 * 3600 + 600]}, now=now)}
     assert out["e"] == now + 2 * 3600 and abs(out["n"] - out["e"]) >= 45 * 60
 
 
@@ -209,7 +231,7 @@ def test_a_studio_post_planned_again_after_a_skip_keeps_the_gap_to_what_was_just
     assert pub.claim("h1", out) == 0
     h1 = next(x for x in out["to_schedule"] if x["id"] == "h1")
     pub.dash.data["queue"] = [x for x in pub.dash.data["queue"] if x["id"] != "h1"]
-    pub.dash.data["in_progress"] = [{"id": "h1", "page": "huddle", "page_name": "Huddle Room", "scheduled_for": h1["schedule_utc"],
+    pub.dash.data["in_progress"] = [{"id": "h1", "page": "demo-sports", "page_name": "Demo Sports", "scheduled_for": h1["schedule_utc"],
                                      "claimed_at": now * 1000, "caption": "Caption h1", "socialpilot_login_id": "", "update_of": None}]
     real = time.time
     monkeypatch.setattr(time, "time", lambda: real() + 8 * 60)
@@ -226,7 +248,7 @@ def test_hourly_posts_wait_for_the_audiences_morning():
     win = ("America/New_York", 7, 23)
     # editors approve 4 posts at 07:00 IST = 21:30 New York (the morning review)
     approved = datetime(2026, 10, 13, 7, 0, tzinfo=ist).timestamp()
-    q = [{"id": c, "page": "huddle", "approved_at": approved + i} for i, c in enumerate("abcd")]
+    q = [{"id": c, "page": "demo-sports", "approved_at": approved + i} for i, c in enumerate("abcd")]
     slots = plan(q, {}, now=approved, window=win)
     local = [datetime.fromtimestamp(s["at"], ny).strftime("%m-%d %H:%M") for s in slots]
     assert local == ["10-12 22:30", "10-13 07:00", "10-13 07:45", "10-13 08:30"]
@@ -236,13 +258,13 @@ def test_hourly_posts_wait_for_the_audiences_morning():
     # a post approved at 03:00 New York goes out at 07:00, and Studio times are never moved
     early = datetime(2026, 10, 13, 3, 0, tzinfo=ny).timestamp()
     st = datetime(2026, 10, 13, 4, 30, tzinfo=ny).timestamp()
-    got = {x["id"]: x for x in plan([{"id": "a", "page": "huddle", "approved_at": early},
-                                     {"id": "s", "page": "culture-rush", "approved_at": early, "requested_at": st * 1000}],
+    got = {x["id"]: x for x in plan([{"id": "a", "page": "demo-sports", "approved_at": early},
+                                     {"id": "s", "page": "demo-celeb", "approved_at": early, "requested_at": st * 1000}],
                                     {}, now=early, window=win)}
     a, s = got["a"], got["s"]
     assert datetime.fromtimestamp(a["at"], ny).strftime("%H:%M") == "07:00"
     assert s["at"] == st
-    assert plan([{"id": "a", "page": "huddle", "approved_at": early}], {}, now=early)[0]["at"] < a["at"]   # no window: as before
+    assert plan([{"id": "a", "page": "demo-sports", "approved_at": early}], {}, now=early)[0]["at"] < a["at"]   # no window: as before
 
 
 def test_audience_window_edges():
@@ -252,12 +274,12 @@ def test_audience_window_edges():
     win = ("America/New_York", 7, 23)
     # the night US clocks change: 22:40 ET on Oct 31 + 1h -> held to 07:00 EST (12:00 UTC)
     t = datetime(2026, 10, 31, 22, 40, tzinfo=ny).timestamp()
-    (p,) = plan([{"id": "a", "page": "huddle", "approved_at": t}], {}, now=t, window=win)
+    (p,) = plan([{"id": "a", "page": "demo-sports", "approved_at": t}], {}, now=t, window=win)
     assert p["iso_utc"] == "2026-11-01T12:00:00Z" and p.get("held_for_audience_hours")
     # posts already at 07:00 and 07:45 next morning: tonight's goes at 22:40, the next after them
     t = datetime(2026, 10, 13, 21, 40, tzinfo=ny).timestamp()
-    busy = {"huddle": [datetime(2026, 10, 14, 7, 0, tzinfo=ny).timestamp(), datetime(2026, 10, 14, 7, 45, tzinfo=ny).timestamp()]}
-    a, b = plan([{"id": "a", "page": "huddle", "approved_at": t}, {"id": "b", "page": "huddle", "approved_at": t + 1}],
+    busy = {"demo-sports": [datetime(2026, 10, 14, 7, 0, tzinfo=ny).timestamp(), datetime(2026, 10, 14, 7, 45, tzinfo=ny).timestamp()]}
+    a, b = plan([{"id": "a", "page": "demo-sports", "approved_at": t}, {"id": "b", "page": "demo-sports", "approved_at": t + 1}],
                 busy, now=t, window=win)
     assert datetime.fromtimestamp(a["at"], ny).strftime("%H:%M") == "22:40" and not a.get("held_for_audience_hours")
     assert datetime.fromtimestamp(b["at"], ny).strftime("%d %H:%M") == "14 08:30" and b.get("held_for_audience_hours")
@@ -275,9 +297,9 @@ def test_account_errors_hold_post_errors_fail():
               "This account has been disabled by Facebook", "", None):
         assert not outage_error(e), e
     # the publisher's own messages, and words inside draft ids, never count
-    for e in ("superseded by its update huddle-202610130209-account-locked-out-of-trial",
+    for e in ("superseded by its update demo-sports-202610130209-account-locked-out-of-trial",
               "publisher run interrupted", "not delivered: missing from SocialPilot",
-              "failed: see huddle-202610130209-bears-trial-has-ended-for-rookie"):
+              "failed: see demo-sports-202610130209-bears-trial-has-ended-for-rookie"):
         assert not outage_error(e), e
 
 
@@ -295,16 +317,16 @@ def test_socialpilot_down_is_tried_about_hourly():
 
 
 def test_mark_failed_with_an_account_error_holds_the_draft(pub, capsys):
-    pub.dash.data["queue"] = [_draft("huddle-1")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1")]
     pub.preflight()
     out = pub.plan()
-    pub.claim("huddle-1", out)
-    claim = json.loads((pub.root / "work" / ".claims" / "huddle-1").read_text())
-    assert claim["claim"] == "1791864091866" and claim["login_id"] == 2662936 and claim["caption"] == "Caption huddle-1"
-    assert pub.run("mark", "huddle-1", status="failed", error="SocialPilot error: Your Account is Locked") == 4
+    pub.claim("demo-sports-1", out)
+    claim = json.loads((pub.root / "work" / ".claims" / "demo-sports-1").read_text())
+    assert claim["claim"] == "1791864091866" and claim["login_id"] == 9100001 and claim["caption"] == "Caption demo-sports-1"
+    assert pub.run("mark", "demo-sports-1", status="failed", error="SocialPilot error: Your Account is Locked") == 4
     assert pub.dash.sent[-1][1] == "held" and pub.dash.sent[-1][2]["claim"] == "1791864091866"
-    assert "HELD huddle-1" in capsys.readouterr().out
-    assert pub.run("mark", "huddle-1", status="failed", error="Error uploading media") == 0     # one post's problem
+    assert "HELD demo-sports-1" in capsys.readouterr().out
+    assert pub.run("mark", "demo-sports-1", status="failed", error="Error uploading media") == 0     # one post's problem
     assert pub.dash.sent[-1][1] == "failed"
 
 
@@ -315,12 +337,12 @@ def test_a_blocked_session_call_is_held_not_failed(pub):
               "Tool use was rejected by the session"):
         assert session_blocked(e) and not outage_error(e), e
     for e in ("(#200) permissions error", "This account has been disabled by Facebook", "Error uploading media",
-              "superseded by its update huddle-202610130209-classifier-blocked-again", None):
+              "superseded by its update demo-sports-202610130209-classifier-blocked-again", None):
         assert not session_blocked(e), e
-    pub.dash.data["queue"] = [_draft("huddle-1")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1")]
     pub.preflight()
-    pub.claim("huddle-1", pub.plan())
-    assert pub.run("mark", "huddle-1", status="failed", error="CreatePost blocked by auto mode classifier") == 4
+    pub.claim("demo-sports-1", pub.plan())
+    assert pub.run("mark", "demo-sports-1", status="failed", error="CreatePost blocked by auto mode classifier") == 4
     assert pub.dash.sent[-1][1] == "held" and pub.dash.sent[-1][2]["claim"]
     assert pub.dash.sent[-1][2]["scope"] == "run"            # not SocialPilot: it is not marked down for everyone
 
@@ -355,19 +377,19 @@ def test_old_dashboard_without_holds_gets_a_failure(monkeypatch, tmp_path):
 # ---- preflight: SocialPilot must answer before anything is claimed (finding 29) --------------------
 
 def test_preflight_failure_holds_the_run_whatever_the_wording(pub, capsys):
-    pub.dash.data["queue"] = [_draft("huddle-1"), _draft("culture-rush-1", page="culture-rush")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1"), _draft("demo-celeb-1", page="demo-celeb")]
     assert pub.preflight(accounts=LOCKED) == 4
     held = pub.dash.statuses("held")
-    assert [i for i, _ in held] == ["huddle-1", "culture-rush-1"]
+    assert [i for i, _ in held] == ["demo-sports-1", "demo-celeb-1"]
     assert all(d["error"] == "SocialPilot error: Your Account is Locked" for _, d in held)
     assert "go to step 6" in capsys.readouterr().out
     # nothing can be claimed in this run
-    assert pub.claim("huddle-1", pub.plan()) == 4 and not pub.dash.statuses("publishing")
+    assert pub.claim("demo-sports-1", pub.plan()) == 4 and not pub.dash.statuses("publishing")
 
 
 @pytest.mark.parametrize("how", ["error", "text", "timezone"])
 def test_preflight_holds_on_an_unknown_outage_or_a_timezone_change(pub, how):
-    pub.dash.data["queue"] = [_draft("huddle-1")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1")]
     if how == "error":            # the call itself failed, worded in a way OUTAGE_RE does not know
         assert pub.run("preflight", error="MCP error -32001: Request timed out") == 4
     elif how == "text":           # what the model saved is the connector's error, not a result
@@ -375,13 +397,13 @@ def test_preflight_holds_on_an_unknown_outage_or_a_timezone_change(pub, how):
     else:                         # every scheduleDateTime would be read in another timezone
         assert pub.preflight(userinfo={"success": True, "data": {"setting": {"timeZone": "America/New_York"}}}) == 4
     [(draft_id, detail)] = pub.dash.statuses("held")
-    assert draft_id == "huddle-1" and detail["error"]
+    assert draft_id == "demo-sports-1" and detail["error"]
     if how == "timezone":
         assert "America/New_York" in detail["error"]
 
 
 def test_preflight_mistakes_hold_nothing(pub):
-    pub.dash.data["queue"] = [_draft("huddle-1")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1")]
     assert "--result" in pub.run("preflight")
     assert "empty" in pub.run("preflight", result=[pub.save("accounts.json", " ")])
     assert "AccountList" in pub.run("preflight", result=[pub.save("userinfo.json", USERINFO)])
@@ -392,21 +414,21 @@ def test_preflight_mistakes_hold_nothing(pub):
 
 
 def test_a_claim_needs_the_preflight_and_the_planned_slot(pub, monkeypatch, capsys):
-    pub.dash.data["queue"] = [_draft("huddle-1")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1")]
     out = pub.plan()
-    assert "preflight" in pub.claim("huddle-1", out)
+    assert "preflight" in pub.claim("demo-sports-1", out)
     assert pub.preflight() == 0
     out = pub.plan()
-    assert "schedule_utc" in pub.run("mark", "huddle-1", status="publishing", scheduled_for="2026-01-01T00:00:00Z")
-    assert "to_schedule" in pub.run("mark", "huddle-2", status="publishing", scheduled_for=out["to_schedule"][0]["schedule_utc"])
+    assert "schedule_utc" in pub.run("mark", "demo-sports-1", status="publishing", scheduled_for="2026-01-01T00:00:00Z")
+    assert "to_schedule" in pub.run("mark", "demo-sports-2", status="publishing", scheduled_for=out["to_schedule"][0]["schedule_utc"])
     assert not pub.dash.statuses("publishing")
     # an old plan: the slot is now less than an hour away, so it is planned again instead
     real = time.time
     monkeypatch.setattr(time, "time", lambda: real() + 20 * 60)
-    assert pub.claim("huddle-1", out) == 3 and "SKIP huddle-1" in capsys.readouterr().out
+    assert pub.claim("demo-sports-1", out) == 3 and "SKIP demo-sports-1" in capsys.readouterr().out
     monkeypatch.setattr(time, "time", real)
-    assert pub.claim("huddle-1", out) == 0
-    assert pub.dash.statuses("publishing") == [("huddle-1", {"scheduled_for": out["to_schedule"][0]["schedule_utc"]})]
+    assert pub.claim("demo-sports-1", out) == 0
+    assert pub.dash.statuses("publishing") == [("demo-sports-1", {"scheduled_for": out["to_schedule"][0]["schedule_utc"]})]
 
 
 # ---- the per-run breaker (finding 29) ---------------------------------------------------------------
@@ -414,58 +436,58 @@ def test_a_claim_needs_the_preflight_and_the_planned_slot(pub, monkeypatch, caps
 def test_a_second_unknown_failure_on_one_account_holds_its_drafts(pub, capsys):
     """3 drafts on a page, 2 different unrecognised errors: the second is held, and so is the first.
     Only that page's drafts wait (exit 3: the run goes on), and nothing is held twice."""
-    pub.dash.data["queue"] = [_draft("huddle-1"), _draft("huddle-2"), _draft("huddle-3"),
-                              _draft("culture-rush-1", page="culture-rush")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1"), _draft("demo-sports-2"), _draft("demo-sports-3"),
+                              _draft("demo-celeb-1", page="demo-celeb")]
     pub.preflight()
     out = pub.plan()
-    assert pub.claim("huddle-1", out) == 0
-    assert pub.run("mark", "huddle-1", status="failed", error="401 Unauthorized") == 0
-    assert pub.dash.sent[-1][:2] == ("huddle-1", "failed")
-    assert pub.claim("huddle-2", out) == 0
-    assert pub.run("mark", "huddle-2", status="failed", error="MCP error -32001: Request timed out") == 3
+    assert pub.claim("demo-sports-1", out) == 0
+    assert pub.run("mark", "demo-sports-1", status="failed", error="401 Unauthorized") == 0
+    assert pub.dash.sent[-1][:2] == ("demo-sports-1", "failed")
+    assert pub.claim("demo-sports-2", out) == 0
+    assert pub.run("mark", "demo-sports-2", status="failed", error="MCP error -32001: Request timed out") == 3
     held = pub.dash.statuses("held")
-    assert [i for i, _ in held] == ["huddle-2", "huddle-1"]          # the first failure waits as well
+    assert [i for i, _ in held] == ["demo-sports-2", "demo-sports-1"]          # the first failure waits as well
     assert all(d["claim"] == "1791864091866" and d["scope"] == "account" for _, d in held)
     assert held[1][1]["error"] == "401 Unauthorized"
-    assert "SKIP huddle-2: held, not failed" in capsys.readouterr().out
-    assert pub.claim("huddle-3", out) == 0                           # still tried: it may well work
-    assert pub.run("mark", "huddle-3", status="failed", error="401 Unauthorized") == 3
-    assert [i for i, _ in pub.dash.statuses("held")] == ["huddle-2", "huddle-1", "huddle-3"]
-    assert pub.claim("culture-rush-1", out) == 0                     # the other page goes on
-    assert pub.scheduled("culture-rush-1", pub.entry("culture-rush-1", out)) == 0
+    assert "SKIP demo-sports-2: held, not failed" in capsys.readouterr().out
+    assert pub.claim("demo-sports-3", out) == 0                           # still tried: it may well work
+    assert pub.run("mark", "demo-sports-3", status="failed", error="401 Unauthorized") == 3
+    assert [i for i, _ in pub.dash.statuses("held")] == ["demo-sports-2", "demo-sports-1", "demo-sports-3"]
+    assert pub.claim("demo-celeb-1", out) == 0                     # the other page goes on
+    assert pub.scheduled("demo-celeb-1", pub.entry("demo-celeb-1", out)) == 0
 
 
 def test_a_success_on_the_same_account_between_two_failures_keeps_them_separate(pub):
-    pub.dash.data["queue"] = [_draft("huddle-1"), _draft("huddle-2"), _draft("huddle-3"),
-                              _draft("culture-rush-1", page="culture-rush"), _draft("huddle-4")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1"), _draft("demo-sports-2"), _draft("demo-sports-3"),
+                              _draft("demo-celeb-1", page="demo-celeb"), _draft("demo-sports-4")]
     pub.preflight()
     out = pub.plan()
-    pub.claim("huddle-1", out)
-    assert pub.run("mark", "huddle-1", status="failed", error="(#200) permissions error") == 0
-    pub.claim("huddle-2", out)
-    assert pub.scheduled("huddle-2", pub.entry("huddle-2", out)) == 0
-    pub.claim("huddle-3", out)
-    assert pub.run("mark", "huddle-3", status="failed", error="(#200) permissions error") == 0
+    pub.claim("demo-sports-1", out)
+    assert pub.run("mark", "demo-sports-1", status="failed", error="(#200) permissions error") == 0
+    pub.claim("demo-sports-2", out)
+    assert pub.scheduled("demo-sports-2", pub.entry("demo-sports-2", out)) == 0
+    pub.claim("demo-sports-3", out)
+    assert pub.run("mark", "demo-sports-3", status="failed", error="(#200) permissions error") == 0
     assert [s for _, s, _ in pub.dash.sent if s in ("failed", "held")] == ["failed", "failed"]
     # a post on another page says nothing about this page's account
-    pub.claim("culture-rush-1", out)
-    assert pub.scheduled("culture-rush-1", pub.entry("culture-rush-1", out)) == 0
-    pub.claim("huddle-4", out)
-    assert pub.run("mark", "huddle-4", status="failed", error="(#200) permissions error") == 3
+    pub.claim("demo-celeb-1", out)
+    assert pub.scheduled("demo-celeb-1", pub.entry("demo-celeb-1", out)) == 0
+    pub.claim("demo-sports-4", out)
+    assert pub.run("mark", "demo-sports-4", status="failed", error="(#200) permissions error") == 3
     # the publisher's own messages are never SocialPilot failing
-    assert pub.run("mark", "huddle-3", status="failed", error="earlier copy in SocialPilot: unscheduled") == 0
+    assert pub.run("mark", "demo-sports-3", status="failed", error="earlier copy in SocialPilot: unscheduled") == 0
 
 
 def test_one_pages_broken_account_never_stops_the_other_pages(pub, capsys):
-    """The reviewer's case: Huddle Room needs reconnecting in SocialPilot. Its drafts wait (held for
-    that account only), Culture Rush's draft is scheduled in the same run, and the next run's plan
+    """The reviewer's case: Demo Sports needs reconnecting in SocialPilot. Its drafts wait (held for
+    that account only), Demo Celeb's draft is scheduled in the same run, and the next run's plan
     shows no SocialPilot outage. It used to hold everything and stop every run for up to 12 hours."""
     reconnect = copy.deepcopy(ACCOUNTS)
     reconnect["accounts"][1]["isReconnect"] = True
-    pub.dash.data["queue"] = [_draft("h1"), _draft("h2"), _draft("c1", page="culture-rush")]
+    pub.dash.data["queue"] = [_draft("h1"), _draft("h2"), _draft("c1", page="demo-celeb")]
     assert pub.preflight(accounts=reconnect) == 0
     said = capsys.readouterr().out
-    assert "NOTE account Huddle Room (2662936) needs reconnecting" in said and "OK SocialPilot answers" in said
+    assert "NOTE account Demo Sports (9100001) needs reconnecting" in said and "OK SocialPilot answers" in said
     assert not pub.dash.statuses("held")                     # nothing held before anything was tried
     out = pub.plan()
     assert [x["id"] for x in out["to_schedule"]] == ["h1", "h2", "c1"]
@@ -482,7 +504,7 @@ def test_one_pages_broken_account_never_stops_the_other_pages(pub, capsys):
     now = int(time.time())
     pub.dash.data["queue"] = [_draft("h1", holds=1, held_scope="account", held_error="Page needs to be reconnected", approved_at=now - 60),
                               _draft("h2", holds=1, held_scope="account", held_error="Page needs to be reconnected", approved_at=now - 60),
-                              _draft("h3"), _draft("c2", page="culture-rush")]
+                              _draft("h3"), _draft("c2", page="demo-celeb")]
     assert pub.preflight() == 0                              # SocialPilot no longer flags it
     nxt = pub.plan()
     assert [x["id"] for x in nxt["to_schedule"]] == ["h3", "c2"]
@@ -512,8 +534,8 @@ def test_a_pages_failure_in_an_earlier_run_holds_its_next_failure(pub, capsys):
     # the next approval's run, in a fresh container: only what the dashboard keeps
     shutil.rmtree(pub.root / "work")
     now_ms = time.time() * 1000
-    pub.dash.data["queue"] = [_draft("h2"), _draft("c1", page="culture-rush")]
-    pub.dash.data["socialpilot"] = {"failing_pages": {"huddle": {"id": "h1", "error": unknown, "at": now_ms - 10 * 60e3}}}
+    pub.dash.data["queue"] = [_draft("h2"), _draft("c1", page="demo-celeb")]
+    pub.dash.data["socialpilot"] = {"failing_pages": {"demo-sports": {"id": "h1", "error": unknown, "at": now_ms - 10 * 60e3}}}
     pub.preflight()
     out = pub.plan()
     pub.claim("h2", out)
@@ -526,7 +548,7 @@ def test_a_pages_failure_in_an_earlier_run_holds_its_next_failure(pub, capsys):
     # over an hour ago it no longer counts
     shutil.rmtree(pub.root / "work")
     pub.dash.data["queue"] = [_draft("h3")]
-    pub.dash.data["socialpilot"]["failing_pages"]["huddle"]["at"] = now_ms - 61 * 60e3
+    pub.dash.data["socialpilot"]["failing_pages"]["demo-sports"]["at"] = now_ms - 61 * 60e3
     pub.preflight()
     out = pub.plan()
     pub.claim("h3", out)
@@ -552,7 +574,7 @@ def test_a_post_retried_after_its_own_failure_fails_again_not_held(pub, capsys):
     def run(queue, failed_id):               # the next approval's run, in a fresh container
         shutil.rmtree(pub.root / "work")
         pub.dash.data["queue"] = queue
-        pub.dash.data["socialpilot"] = {"failing_pages": {"huddle": {"id": failed_id, "error": bad, "at": time.time() * 1000 - 5 * 60e3}}}
+        pub.dash.data["socialpilot"] = {"failing_pages": {"demo-sports": {"id": failed_id, "error": bad, "at": time.time() * 1000 - 5 * 60e3}}}
         pub.preflight()
         return pub.plan()
     # an editor retries h1 five minutes later: it fails the same way, and the page's flag is renewed
@@ -589,25 +611,25 @@ def test_a_post_retried_after_its_own_failure_fails_again_not_held(pub, capsys):
 
 
 def test_an_outage_wording_or_a_session_block_still_stops_the_run(pub, capsys):
-    pub.dash.data["queue"] = [_draft("huddle-1"), _draft("culture-rush-1", page="culture-rush"), _draft("huddle-2")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1"), _draft("demo-celeb-1", page="demo-celeb"), _draft("demo-sports-2")]
     pub.preflight()
     out = pub.plan()
-    pub.claim("huddle-1", out)
-    assert pub.run("mark", "huddle-1", status="failed", error="CreatePost blocked by auto mode classifier") == 4
+    pub.claim("demo-sports-1", out)
+    assert pub.run("mark", "demo-sports-1", status="failed", error="CreatePost blocked by auto mode classifier") == 4
     assert pub.dash.sent[-1][2]["scope"] == "run"            # this session: SocialPilot is not marked down
-    assert pub.claim("culture-rush-1", out) == 4
+    assert pub.claim("demo-celeb-1", out) == 4
     (pub.root / "work" / ".publish-run.json").unlink()
     pub.preflight()
-    pub.claim("culture-rush-1", out)
-    assert pub.run("mark", "culture-rush-1", status="failed", error="SocialPilot error: Your Account is Locked") == 4
+    pub.claim("demo-celeb-1", out)
+    assert pub.run("mark", "demo-celeb-1", status="failed", error="SocialPilot error: Your Account is Locked") == 4
     assert "scope" not in pub.dash.sent[-1][2]               # SocialPilot itself: every page waits
-    assert pub.claim("huddle-2", out) == 4
+    assert pub.claim("demo-sports-2", out) == 4
 
 
 def test_a_failed_lookup_holds_only_that_draft(pub, capsys):
     """PUBLISH.md 4.2: a lookup error for one draft is not SocialPilot being down: only that draft
     waits (scope draft), and the run goes on with the next item."""
-    pub.dash.data["queue"] = [_draft("h-1", ever_sent=True, prior_post_id="sp-1"), _draft("c-1", page="culture-rush")]
+    pub.dash.data["queue"] = [_draft("h-1", ever_sent=True, prior_post_id="sp-1"), _draft("c-1", page="demo-celeb")]
     pub.preflight()
     out = pub.plan()
     pub.claim("h-1", out)
@@ -634,7 +656,7 @@ def test_preflight_reads_results_however_they_were_saved(pub, how):
             "python": repr(ACCOUNTS), "text_between": f"{a}\nUserInfo: {u}",
             "calcutta": a + json.dumps({"success": True, "data": {"setting": {"timeZone": "Asia/Calcutta"}}}),
             "wrapped": json.dumps([{"type": "text", "text": a}]) + "\n" + u}[how]
-    pub.dash.data["queue"] = [_draft("huddle-1")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1")]
     assert pub.run("preflight", result=[pub.save("accounts.json", text)]) == 0
     assert not pub.dash.statuses("held")
     # the timezone is still checked when the UserInfo result comes after other text
@@ -645,7 +667,7 @@ def test_preflight_reads_results_however_they_were_saved(pub, how):
 
 
 def test_preflight_holds_only_on_what_reads_like_a_failed_call(pub, capsys):
-    pub.dash.data["queue"] = [_draft("huddle-1")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1")]
     # no result and nothing like an error in it: a mistake in the file, nothing is held
     assert "save the result exactly" in pub.run("preflight", result=[pub.save("accounts.json", "Here are the accounts:")])
     assert not pub.dash.sent
@@ -666,20 +688,20 @@ def test_zones_compare_by_their_clocks():
 
 
 def test_a_second_preflight_keeps_the_runs_failures_and_its_stop(pub, capsys):
-    pub.dash.data["queue"] = [_draft("huddle-1"), _draft("huddle-2"), _draft("culture-rush-1", page="culture-rush")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1"), _draft("demo-sports-2"), _draft("demo-celeb-1", page="demo-celeb")]
     pub.preflight()
     out = pub.plan()
-    pub.claim("huddle-1", out)
-    assert pub.run("mark", "huddle-1", status="failed", error="401 Unauthorized") == 0
+    pub.claim("demo-sports-1", out)
+    assert pub.run("mark", "demo-sports-1", status="failed", error="401 Unauthorized") == 0
     assert pub.preflight() == 0                             # checking SocialPilot again forgets nothing
-    pub.claim("huddle-2", out)
-    assert pub.run("mark", "huddle-2", status="failed", error="401 Unauthorized") == 3
-    pub.claim("culture-rush-1", out)
-    assert pub.run("mark", "culture-rush-1", status="failed", error="Your Account is Locked") == 4
+    pub.claim("demo-sports-2", out)
+    assert pub.run("mark", "demo-sports-2", status="failed", error="401 Unauthorized") == 3
+    pub.claim("demo-celeb-1", out)
+    assert pub.run("mark", "demo-celeb-1", status="failed", error="Your Account is Locked") == 4
     capsys.readouterr()
     assert pub.preflight() == 4                             # a stopped run stays stopped
     assert "already stopped scheduling" in capsys.readouterr().out
-    assert pub.claim("huddle-2", out) == 4
+    assert pub.claim("demo-sports-2", out) == 4
 
 
 def test_publish_queue_changes_nothing(pub):
@@ -695,49 +717,49 @@ def test_a_created_post_is_never_failed_when_the_queue_does_not_show_it(pub, cap
     """CreatePost worked but QueuedPosts misses it: one wider look, then it is recorded as scheduled
     at its slot with CreatePost's post id (the delivery check finds it), for a person to check.
     It used to be failed "created but not in SocialPilot's queue", and a Retry posted it twice."""
-    pub.dash.data["queue"] = [_draft("huddle-1"), _draft("huddle-2"), _draft("huddle-3")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1"), _draft("demo-sports-2"), _draft("demo-sports-3")]
     pub.preflight()
     out = pub.plan()
     item = out["to_schedule"][0]
-    pub.claim("huddle-1", out)
-    msg = pub.scheduled("huddle-1", post_id="0fa8d79d-653f-48f8-9682-1f9d0a220b14")
+    pub.claim("demo-sports-1", out)
+    msg = pub.scheduled("demo-sports-1", post_id="0fa8d79d-653f-48f8-9682-1f9d0a220b14")
     assert "NOT FOUND" in msg and f"startDate = endDate = {item['schedule_local'][:10]}" in msg and "no q" in msg
     assert not pub.dash.statuses("scheduled")
-    assert pub.scheduled("huddle-1", post_id="0fa8d79d-653f-48f8-9682-1f9d0a220b14") == 5
+    assert pub.scheduled("demo-sports-1", post_id="0fa8d79d-653f-48f8-9682-1f9d0a220b14") == 5
     _, status, detail = pub.dash.sent[-1]
     assert status == "scheduled" and detail["post_id"] == "0fa8d79d-653f-48f8-9682-1f9d0a220b14"
-    assert detail["scheduled_for"] == item["schedule_utc"] and detail["sp_login_id"] == 2662936 and detail["copies"] == 0
+    assert detail["scheduled_for"] == item["schedule_utc"] and detail["sp_login_id"] == 9100001 and detail["copies"] == 0
     assert "did not show it" in detail["needs_action"] and "error" not in detail
-    assert "STOP huddle-1" in capsys.readouterr().out
+    assert "STOP demo-sports-1" in capsys.readouterr().out
     # the old wording, from a model that remembers it, is recorded the same way
     (pub.root / "work" / ".publish-run.json").unlink()
     pub.preflight()
-    pub.claim("huddle-2", out)
-    assert pub.run("mark", "huddle-2", status="failed", error="created but not in SocialPilot's queue", post_id="cp-2") == 5
+    pub.claim("demo-sports-2", out)
+    assert pub.run("mark", "demo-sports-2", status="failed", error="created but not in SocialPilot's queue", post_id="cp-2") == 5
     assert pub.dash.sent[-1][1] == "scheduled" and not pub.dash.statuses("failed")
     # another run's claim (interrupted): never recorded as scheduled on a guess
     pub.dash.sent.clear()
-    (pub.root / "work" / ".plan" / "huddle-3").write_text(json.dumps({"caption": "Caption huddle-3", "login_id": 2662936,
+    (pub.root / "work" / ".plan" / "demo-sports-3").write_text(json.dumps({"caption": "Caption demo-sports-3", "login_id": 9100001,
                                                                      "scheduled_for": item["schedule_utc"]}))
-    assert "NOT FOUND" in pub.scheduled("huddle-3")
-    assert "publisher run interrupted" in pub.scheduled("huddle-3") and pub.dash.sent == []
+    assert "NOT FOUND" in pub.scheduled("demo-sports-3")
+    assert "publisher run interrupted" in pub.scheduled("demo-sports-3") and pub.dash.sent == []
 
 
 # ---- what `mark --status scheduled` checks (finding 31) -------------------------------------------
 
 def test_a_scheduled_post_is_checked_against_its_claim(pub, capsys):
-    pub.dash.data["queue"] = [_draft("huddle-1")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1")]
     pub.preflight()
     out = pub.plan()
-    pub.claim("huddle-1", out)
-    assert "--queued" in pub.run("mark", "huddle-1", status="scheduled", post_id="cp-1")
+    pub.claim("demo-sports-1", out)
+    assert "--queued" in pub.run("mark", "demo-sports-1", status="scheduled", post_id="cp-1")
     item = out["to_schedule"][0]
-    other = pub.entry("huddle-1", out, postDesc="Another post", postTimeFormat=_shift(item["schedule_local"], 45))
-    assert "NOT FOUND" in pub.scheduled("huddle-1", other)
-    assert pub.scheduled("huddle-1", pub.entry("huddle-1", out, postDesc=item["caption"].replace(" ", "\n"))) == 0
+    other = pub.entry("demo-sports-1", out, postDesc="Another post", postTimeFormat=_shift(item["schedule_local"], 45))
+    assert "NOT FOUND" in pub.scheduled("demo-sports-1", other)
+    assert pub.scheduled("demo-sports-1", pub.entry("demo-sports-1", out, postDesc=item["caption"].replace(" ", "\n"))) == 0
     _, status, detail = pub.dash.sent[-1]
     assert status == "scheduled" and "needs_action" not in detail
-    assert detail == {"post_id": "cp-1", "sp_post_id": "sp-huddle-1", "sp_login_id": 2662936, "copies": 1,
+    assert detail == {"post_id": "cp-1", "sp_post_id": "sp-demo-sports-1", "sp_login_id": 9100001, "copies": 1,
                       "scheduled_for": item["schedule_utc"]}
 
 
@@ -749,20 +771,20 @@ def _shift(local, minutes):
 @pytest.mark.parametrize("case", ["wrong_account", "copy_elsewhere", "utc_typed_as_ist", "two_copies", "caption_changed",
                                   "made_earlier"])
 def test_a_broken_rule_is_recorded_for_a_person_and_stops_the_run(pub, capsys, case):
-    pub.dash.data["queue"] = [_draft("huddle-1"), _draft("huddle-2")]
+    pub.dash.data["queue"] = [_draft("demo-sports-1"), _draft("demo-sports-2")]
     pub.preflight()
     out = pub.plan()
-    pub.claim("huddle-1", out)
+    pub.claim("demo-sports-1", out)
     item = out["to_schedule"][0]
-    e = pub.entry("huddle-1", out)
-    entries = {"wrong_account": [{**e, "loginId": 2662937, "accountUsername": "Keaton Caleb"}],
-               # QueuedPosts without an account filter: its own copy is right, a second one is on Keaton Caleb
-               "copy_elsewhere": [e, {**e, "postId": "sp-kc", "loginId": 2662937, "accountUsername": "Keaton Caleb"}],
+    e = pub.entry("demo-sports-1", out)
+    entries = {"wrong_account": [{**e, "loginId": 9100009, "accountUsername": "Personal Account"}],
+               # QueuedPosts without an account filter: its own copy is right, a second one is on Personal Account
+               "copy_elsewhere": [e, {**e, "postId": "sp-kc", "loginId": 9100009, "accountUsername": "Personal Account"}],
                "utc_typed_as_ist": [{**e, "postTimeFormat": _shift(item["schedule_local"], -330)}],
                "two_copies": [e, {**e, "postId": "sp-again"}],
-               "caption_changed": [{**e, "postDesc": "Caption huddle-1, but shorter"}],
+               "caption_changed": [{**e, "postDesc": "Caption demo-sports-1, but shorter"}],
                "made_earlier": [{**e, "postTimeFormat": _shift(item["schedule_local"], 90), "createdOn": "Oct 01, 2026 09:31 AM"}]}[case]
-    code = pub.scheduled("huddle-1", *entries)
+    code = pub.scheduled("demo-sports-1", *entries)
     _, status, detail = pub.dash.sent[-1]
     if case == "made_earlier":      # a post an earlier run made (the duplicate guard found it): its own time is recorded
         assert code == 0 and status == "scheduled" and "needs_action" not in detail
@@ -771,44 +793,92 @@ def test_a_broken_rule_is_recorded_for_a_person_and_stops_the_run(pub, capsys, c
     if case == "caption_changed":   # recorded for a person, but the run goes on
         assert code == 0 and "caption" in detail["needs_action"]
         return
-    assert code == 5 and "STOP huddle-1" in capsys.readouterr().out
-    assert {"wrong_account": "wrong SocialPilot account", "copy_elsewhere": "Keaton Caleb, loginId 2662937",
+    assert code == 5 and "STOP demo-sports-1" in capsys.readouterr().out
+    assert {"wrong_account": "wrong SocialPilot account", "copy_elsewhere": "Personal Account, loginId 9100009",
             "utc_typed_as_ist": "not the planned", "two_copies": "2 copies"}[case] in detail["needs_action"]
     assert status == ("failed" if case == "wrong_account" else "scheduled")
     if case == "copy_elsewhere":    # its own copy goes out: recorded as scheduled (a Retry would post it twice)
-        assert detail["sp_post_id"] == "sp-huddle-1" and detail["sp_login_id"] == 2662936 and detail["copies"] == 1
+        assert detail["sp_post_id"] == "sp-demo-sports-1" and detail["sp_login_id"] == 9100001 and detail["copies"] == 1
     if case == "utc_typed_as_ist":  # SocialPilot's real time, so later plans space posts around it
         assert detail["scheduled_for"] == datetime.fromtimestamp(
             datetime.strptime(item["schedule_local"], "%Y-%m-%d %H:%M").replace(tzinfo=IST).timestamp() - 330 * 60,
             timezone.utc).isoformat().replace("+00:00", "Z")
-    assert pub.claim("huddle-2", out) == 4              # nothing else is scheduled in this run
+    assert pub.claim("demo-sports-2", out) == 4              # nothing else is scheduled in this run
 
 
 # ---- what the plan settles itself (findings 35, 76) -------------------------------------------------
 
 def test_the_plan_fails_drafts_without_an_account_and_flags_outdated_originals(pub, capsys):
     soon = datetime.fromtimestamp(time.time() + 7200, timezone.utc).isoformat().replace("+00:00", "Z")
-    pub.dash.data["scheduled"] = [{"id": "huddle-orig", "page": "huddle", "page_name": "Huddle Room", "scheduled_for": soon,
-                                   "post_id": "cp-0", "sp_post_id": "sp-0", "sp_login_id": None, "socialpilot_login_id": "",
-                                   "caption_start": "Caption huddle-orig", "update_of": None}]
-    pub.dash.data["queue"] = [_draft("huddle-upd", update_of="huddle-orig"), _draft("new-1", page="new-page"),
-                              _draft("blocked-1", page="other", socialpilot_login_id="2662937"),
+    pub.dash.data["scheduled"] = [{"id": "demo-sports-orig", "page": "demo-sports", "page_name": "Demo Sports", "scheduled_for": soon,
+                                   "post_id": "cp-0", "sp_post_id": "sp-0", "sp_login_id": None, "socialpilot_login_id": "9100001",
+                                   "caption_start": "Caption demo-sports-orig", "update_of": None}]
+    pub.dash.data["queue"] = [_draft("demo-sports-upd", update_of="demo-sports-orig"), _draft("new-1", page="new-page"),
+                              _draft("blocked-1", page="other", socialpilot_login_id="9100009"),
                               _draft("unread-1", page="unread", login_error=True),
                               _draft("admin-1", page="admin-page", page_name="Admin Page", socialpilot_login_id="555")]
     out = pub.plan()
-    assert [x["id"] for x in out["to_schedule"]] == ["huddle-upd", "admin-1"]
+    assert [x["id"] for x in out["to_schedule"]] == ["demo-sports-upd", "admin-1"]
     assert out["to_schedule"][1]["socialpilot_account"] == {"name": "Admin Page", "loginId": 555}
     assert [x["id"] for x in out["no_account"]] == ["new-1", "blocked-1"]
     failed = dict(pub.dash.statuses("failed"))
-    assert failed["new-1"]["error"].startswith("page has no SocialPilot account: set it in the admin panel")
-    assert "2662937" in failed["blocked-1"]["error"] and "unread-1" not in failed      # unreadable: tried next run
+    assert failed["new-1"]["error"].startswith("page has no SocialPilot account: press Try again on Go live")
+    assert "9100009" in failed["blocked-1"]["error"] and "unread-1" not in failed      # unreadable: tried next run
     [(orig, act)] = pub.dash.statuses("needs_action")
-    assert orig == "huddle-orig" and act["error"].startswith("delete it in SocialPilot: it is scheduled for ")
-    assert "huddle-upd" in act["error"] and act["kind"] == "superseded_original"     # Done also retires it
+    assert orig == "demo-sports-orig" and act["error"].startswith("delete it in SocialPilot: it is scheduled for ")
+    assert "demo-sports-upd" in act["error"] and act["kind"] == "superseded_original"     # Done also retires it
     s = out["already_scheduled"][0]
-    assert s["socialpilot_account"]["loginId"] == 2662936 and s["caption_start"] == "Caption huddle-orig"
+    assert s["socialpilot_account"]["loginId"] == 9100001 and s["caption_start"] == "Caption demo-sports-orig"
     assert s["day"] == s["schedule_local"][:10] and s["sp_post_id"] == "sp-0"
     assert "no usable SocialPilot account" in capsys.readouterr().err       # the run report still sees it
+
+
+def test_only_a_live_pages_own_account_is_ever_planned(pub, capsys):
+    """The publisher posts only to the account the onboarding routine linked to a live page. A paused
+    page's drafts wait (approved, not failed); a blocked account is refused whatever the page record
+    says; one account given by two pages is used for neither."""
+    pub.dash.data["waiting"] = [{"id": "waits-1", "page": "demo-celeb", "why": "the page is paused"},
+                                {"id": "listed-1", "page": "new-page", "why": "the page is not live yet"}]
+    pub.dash.data["queue"] = [_draft("live-1"), _draft("paused-1", page="demo-celeb", page_status="paused"),
+                              _draft("draft-1", page="new-page", page_status="draft", socialpilot_login_id="9100003"),
+                              _draft("listed-1", page="new-page", socialpilot_login_id="9100003"),   # in both: it waits
+                              _draft("blocked-1", page="other", socialpilot_login_id=BLOCKED),
+                              _draft("twin-1", page="twin-a", socialpilot_login_id="9100005"),
+                              _draft("twin-2", page="twin-b", socialpilot_login_id="9100005")]
+    out = pub.plan()
+    assert [x["id"] for x in out["to_schedule"]] == ["live-1"]
+    assert out["to_schedule"][0]["socialpilot_account"] == {"name": "Demo Sports", "loginId": 9100001}
+    assert sorted(x["id"] for x in out["page_not_live"]) == ["draft-1", "listed-1", "paused-1", "waits-1"]
+    assert [x["id"] for x in out["no_account"]] == ["blocked-1", "twin-1", "twin-2"]
+    failed = dict(pub.dash.statuses("failed"))
+    assert set(failed) == {"blocked-1", "twin-1", "twin-2"}                     # the paused page's drafts wait
+    assert BLOCKED in failed["blocked-1"]["error"] and "more than one page" in failed["twin-1"]["error"]
+
+
+def test_a_claim_on_a_blocked_account_is_refused_whatever_the_plan_file_says(pub):
+    assert pub.preflight() == 0
+    pub.dash.data["queue"] = [_draft("demo-sports-1")]
+    out = pub.plan()
+    plan_file = pub.root / "work" / ".plan" / "demo-sports-1"
+    planned = json.loads(plan_file.read_text())
+    plan_file.write_text(json.dumps({**planned, "login_id": int(BLOCKED)}))          # edited by hand
+    code = pub.claim("demo-sports-1", out)
+    assert isinstance(code, str) and code.startswith("REFUSED demo-sports-1") and BLOCKED in code
+    assert not pub.dash.statuses("publishing")
+
+
+def test_the_blocked_accounts_are_read_from_the_config_under_either_name():
+    import yaml
+    from bore.publish import blocked_login_ids, page_account
+    sp = yaml.safe_load((ROOT / "config" / "socialpilot.yaml").read_text())
+    assert blocked_login_ids(sp) and "accounts" not in sp                      # no account is listed per page
+    assert blocked_login_ids({"blocked_login_ids": [1, "2"], "deny": [3]}) == {"1", "2", "3"}
+    live = {"page": "p", "page_name": "P", "page_status": "live", "socialpilot_login_id": "7"}
+    assert page_account(live, frozenset()) == ({"name": "P", "loginId": 7}, "")
+    assert page_account(live, frozenset({"7"}))[0] == {}
+    assert page_account({**live, "page_status": "paused"}, frozenset())[0] == {}
+    assert page_account({k: v for k, v in live.items() if k != "page_status"}, frozenset())[0]["loginId"] == 7
+    assert page_account({**live, "socialpilot_login_id": ""}, frozenset())[0] == {}
 
 
 def test_drafts_sent_before_are_looked_up_before_they_are_created(pub):
@@ -860,11 +930,11 @@ def test_a_retried_post_whose_old_copy_socialpilot_dropped_is_created_again(pub,
 def test_busy_times_name_the_page_by_slug_name_or_account(pub, capsys):
     pub.dash.data["queue"] = [_draft("h-1")]
     free = pub.plan()["to_schedule"][0]["schedule_local"]
-    for name in ("huddle", "Huddle Room", "2662936"):
+    for name in ("demo-sports", "Demo Sports", "9100001"):
         got = pub.plan(busy=[f"{name}={free}"])["to_schedule"][0]["schedule_local"]
         assert got >= _shift(free, 45), name
-    out = pub.plan(busy=[f"Keaton Caleb={free}"])
-    assert out["busy_ignored"] == ["Keaton Caleb"] and out["to_schedule"][0]["schedule_local"] == free
+    out = pub.plan(busy=[f"Personal Account={free}"])
+    assert out["busy_ignored"] == ["Personal Account"] and out["to_schedule"][0]["schedule_local"] == free
     assert "ignored" in capsys.readouterr().err
 
 
@@ -926,11 +996,11 @@ def test_publish_md_names_only_fields_the_plan_gives(pub):
     pub.dash.data = {
         "queue": [_draft("h-new", update_of="h-old"), _draft("h-old"), _draft("h-sent", ever_sent=True, prior_post_id="sp-1"),
                   _draft("h-wait", holds=1, approved_at=int(now) - 60), _draft("x-1", page="no-account")],
-        "scheduled": [{"id": "h-sched", "page": "huddle", "scheduled_for": iso(now - 3 * 3600), "post_id": "cp", "sp_post_id": "sp",
-                       "sp_login_id": 2662936, "socialpilot_login_id": "", "caption_start": "c", "update_of": None},
-                      {"id": "h-was", "page": "huddle", "scheduled_for": iso(now + 3600), "post_id": "cp2", "sp_post_id": None,
+        "scheduled": [{"id": "h-sched", "page": "demo-sports", "scheduled_for": iso(now - 3 * 3600), "post_id": "cp", "sp_post_id": "sp",
+                       "sp_login_id": 9100001, "socialpilot_login_id": "", "caption_start": "c", "update_of": None},
+                      {"id": "h-was", "page": "demo-sports", "scheduled_for": iso(now + 3600), "post_id": "cp2", "sp_post_id": None,
                        "sp_login_id": None, "socialpilot_login_id": "", "caption_start": "c2", "update_of": None}],
-        "in_progress": [{"id": "h-lost", "page": "huddle", "scheduled_for": iso(now + 7200), "claimed_at": (now - 3600) * 1000,
+        "in_progress": [{"id": "h-lost", "page": "demo-sports", "scheduled_for": iso(now + 7200), "claimed_at": (now - 3600) * 1000,
                          "caption": "c3", "socialpilot_login_id": "", "update_of": None}],
         "socialpilot": {"down": True, "error": "Your Account is Locked", "since": 1, "last_try_at": (now - 3600) * 1000}}
     pub.dash.data["queue"].append(_draft("h-upd", update_of="h-was"))

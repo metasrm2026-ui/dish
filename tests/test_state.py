@@ -29,7 +29,7 @@ def database(path, rows=30):
     st = Store(path)
     for i in range(rows):
         st.log_run("routine-prepare", time.time(), "ok")
-        st.record_sent("huddle", f"k{i}", ["eagles", "hurts"], 10, 2, 1.0, f"story {i}")
+        st.record_sent("demo-sports", f"k{i}", ["eagles", "hurts"], 10, 2, 1.0, f"story {i}")
         st.record_spend("apify/x", 0.01)
     st.commit()
     st.db.close()
@@ -75,7 +75,7 @@ def test_a_pull_that_works_on_a_later_try_restores_and_records_what_it_brought(m
     out = d.pull_state(db)
     assert len(calls) == 3 and "30 runs" in out
     assert D.restored(db)["counts"] == {"runs": 30, "sent_index": 30, "spend": 30}
-    assert len(Store(db).sent_for_page("huddle", 0)) == 30
+    assert len(Store(db).sent_for_page("demo-sports", 0)) == 30
 
 
 @pytest.mark.parametrize("body, why", [
@@ -163,7 +163,7 @@ def test_the_first_run_after_a_pause_prunes_old_rows_and_still_saves(monkeypatch
         st.db.execute("INSERT INTO runs (kind, started, finished, status) VALUES ('routine-prepare', ?, ?, 'ok')",
                       (stop - h * 3600, stop - h * 3600))
         if h < 8 * 24:
-            st.record_sent("huddle", f"k{h}", ["eagles"], 1, 1, 1.0, f"story {h}", now=stop - h * 3600)
+            st.record_sent("demo-sports", f"k{h}", ["eagles"], 1, 1, 1.0, f"story {h}", now=stop - h * 3600)
     for h in range(45 * 6):
         st.db.execute("INSERT INTO spend (at, actor, usd) VALUES (?, 'apify/x', 0.01)", (stop - h * 4 * 3600,))
     st.commit()

@@ -1,7 +1,7 @@
-# Assumed sources, assigned per page from the league(s) its own posts are about.
-# National insiders only as tier_one (reporters, never official/outlet feeds). Everything here is
-# an assumption: `bore health` flags any handle that produces nothing (renamed / suspended), and
-# the per-page lists in config/pages.yaml can be edited freely.
+# What each league's stories look like (keywords) and the web searches that cover it, assigned per
+# page from the league(s) its own posts are about (`bore sources`). No account or subreddit is
+# listed: a page's X accounts and subreddits are researched for it by the onboarding routine
+# (docs/PRODUCT.md) and edited by its owner. tier_one: reporters only, never official/outlet feeds.
 leagues:
   nfl:
     label: NFL
@@ -9,10 +9,9 @@ leagues:
       browns, buccaneers, bucs, cardinals, chargers, chiefs, colts, commanders, cowboys, dolphins,
       eagles, falcons, giants, jaguars, jets, lions, packers, panthers, patriots, raiders, rams,
       ravens, saints, seahawks, steelers, texans, titans, vikings]
-    tier_one: [AdamSchefter, RapSheet, TomPelissero, MikeGarafolo, JFowlerESPN, DMRussini, AlbertBreer,
-      JordanSchultz, CameronWolfe]
-    officials: [NFL, nflnetwork, ESPNNFL, NFLonFOX, PFF]
-    subreddits: [nfl]
+    tier_one: []
+    officials: []
+    subreddits: []
     web_searches: ["NFL news today", "NFL breaking news", "NFL injury update", "NFL trade news",
       "NFL rumors today", "NFL injury report today", "NFL scores and highlights"]
     exclude_terms: [high school, prep football, college football, ncaa, cfb, big ten, big 10,
@@ -23,9 +22,9 @@ leagues:
       grizzlies, hawks, heat, hornets, jazz, kings, knicks, lakers, magic, mavericks, mavs, nets,
       nuggets, pacers, pelicans, pistons, raptors, rockets, spurs, suns, thunder, timberwolves,
       wolves, blazers, warriors, wizards]
-    tier_one: [ShamsCharania, ChrisBHaynes, TheSteinLine, WindhorstESPN, JakeLFischer]
-    officials: [NBA]
-    subreddits: [nba]
+    tier_one: []
+    officials: []
+    subreddits: []
     web_searches: ["NBA news today", "NBA breaking news", "NBA injury update", "NBA trade news"]
   mlb:
     label: MLB
@@ -33,9 +32,9 @@ leagues:
       "blue jays", braves, brewers, cardinals, cubs, diamondbacks, dodgers, guardians, mariners,
       marlins, mets, nationals, orioles, padres, phillies, pirates, rangers, rays, "red sox", reds,
       rockies, royals, tigers, twins, "white sox", yankees]
-    tier_one: [JeffPassan, Ken_Rosenthal, JonHeyman, Feinsand, BNightengale, JoelSherman1, jonmorosi]
-    officials: [MLB]
-    subreddits: [baseball]
+    tier_one: []
+    officials: []
+    subreddits: []
     web_searches: ["MLB news today", "MLB breaking news", "MLB injury update", "MLB trade rumors"]
   nhl:
     label: NHL
@@ -43,18 +42,18 @@ leagues:
       lightning, "maple leafs", leafs, hurricanes, "blue jackets", devils, islanders, rangers,
       flyers, penguins, capitals, blackhawks, avalanche, stars, wild, predators, blues, jets,
       flames, oilers, canucks, ducks, kraken, "golden knights", sharks, "utah hockey"]
-    tier_one: [PierreVLeBrun, FriedgeHNIC, frank_seravalli, ChrisJohnston, DarrenDreger]
-    officials: [NHL]
-    subreddits: [hockey]
+    tier_one: []
+    officials: []
+    subreddits: []
     web_searches: ["NHL news today", "NHL breaking news", "NHL injury update", "NHL trade news"]
   cfb:
     label: College football
     keywords: [cfb, college football, heisman, sec, big ten, acc, big 12, alabama, georgia,
       ohio state, michigan, texas, oregon, lsu, clemson, notre dame, penn state, usc, tennessee,
       oklahoma, florida state, miami hurricanes, auburn, transfer portal]
-    tier_one: [PeteThamel, BruceFeldmanCFB, Brett_McMurphy, RossDellenger]
+    tier_one: []
     officials: []
-    subreddits: [CFB]
+    subreddits: []
     web_searches: ["college football news today", "college football breaking news",
       "transfer portal news"]
   soccer:
@@ -62,9 +61,9 @@ leagues:
     keywords: [premier league, champions league, arsenal, chelsea, liverpool, "man city",
       manchester city, "man united", manchester united, tottenham, spurs, newcastle, barcelona,
       real madrid, "transfer news", mls, messi, "inter miami"]
-    tier_one: [FabrizioRomano, David_Ornstein]
-    officials: [premierleague]
-    subreddits: [soccer]
+    tier_one: []
+    officials: []
+    subreddits: []
     web_searches: ["soccer transfer news today", "Premier League news today"]
   entertainment:
     label: Entertainment / viral / true crime
@@ -72,11 +71,9 @@ leagues:
       bachelor, love island, netflix, hbo, hollywood, oscars, grammys, emmys, red carpet, viral,
       tiktok, influencer, singer, rapper, actress, actor, pop star, taylor swift, beyonce,
       kardashian, true crime, cold case, missing, unsolved, murder, trial, verdict, documentary]
-    # Individual scoop reporters (film/TV industry). Outlets and aggregators are feeds, not scoops.
-    tier_one: [MattBelloni, Justin_Kroll, Borys_Kit, TheInSneider]
-    officials: [Variety, THR, DEADLINE, TMZ, PopBase, PopCrave, enews, people, PageSix, DiscussingFilm]
-    subreddits: [Fauxmoi, popculturechat, entertainment, television, UnresolvedMysteries,
-      TrueCrimeDiscussion, interestingasfuck]
+    tier_one: []
+    officials: []
+    subreddits: []
     web_searches: ["celebrity news today", "entertainment news today", "reality TV news today",
       "America's Got Talent news", "viral story today", "trending on social media today",
       "true crime cold case update", "unsolved mystery new development"]

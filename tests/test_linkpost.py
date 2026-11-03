@@ -80,31 +80,31 @@ def test_reddit_falls_back_to_apify(monkeypatch, cfg):
 
 
 def test_link_brief_payload_and_lint(tmp_path, cfg, web):
-    req = {"id": "culture-rush-1-abc", "url": "https://www.tmz.com/2026/09/28/presley-gerber/",
-           "page": "culture-rush", "note": "use the family photo", "at": 1}
+    req = {"id": "demo-celeb-1-abc", "url": "https://www.tmz.com/2026/09/28/presley-gerber/",
+           "page": "demo-celeb", "note": "use the family photo", "at": 1}
     d = L.write_link_brief(tmp_path, req, cfg)
     b = json.loads((d / "brief.json").read_text())
     assert b["verification"]["route"] == "manual" and b["link"]["note"] == "use the family photo"
     assert len(b["photos"]) == 1 and b["photos"][0]["source"] == "link" and not b["link"]["read_error"]
     copy = {"template": "headline", "headline_lines": ["SOBER HOUSE", "KNEW"], "photo_index": 0,
             "caption": "Staff at Presley Gerber's sober living home knew he had relapsed.\n\nWhat do you think? 👇\n\n"
-                       "#PresleyGerber #CultureRush #entertainmentnews"}
-    res = lint(b, copy, R.load_playbook("culture-rush"), 800)
+                       "#PresleyGerber #DemoRush #entertainmentnews"}
+    res = lint(b, copy, R.load_playbook("demo-celeb"), 800)
     assert any("attribute" in e for e in res["errors"])          # one article: say whose report it is
     copy["caption"] = copy["caption"].replace("knew he had relapsed", "knew he had relapsed, per TMZ")
-    assert not any("attribute" in e for e in lint(b, copy, R.load_playbook("culture-rush"), 800)["errors"])
+    assert not any("attribute" in e for e in lint(b, copy, R.load_playbook("demo-celeb"), 800)["errors"])
     (d / "copy.json").write_text(json.dumps(copy))
     (d / "card.jpg").write_bytes(_jpeg(1080, 1350))
     p = R.draft_payload(d)
-    assert p["link_request"] == "culture-rush-1-abc" and p["link_url"] == req["url"]
+    assert p["link_request"] == "demo-celeb-1-abc" and p["link_url"] == req["url"]
 
 
 def test_unreadable_link_needs_text_or_a_reason(tmp_path, cfg, web):
-    req = {"id": "huddle-1-x", "url": "https://paywalled.example.com/story", "page": "huddle", "at": 1}
+    req = {"id": "demo-sports-1-x", "url": "https://paywalled.example.com/story", "page": "demo-sports", "at": 1}
     d = L.write_link_brief(tmp_path, req, cfg)
     b = json.loads((d / "brief.json").read_text())
     assert b["link"]["read_error"] and b["posts"] == []
-    res = lint(b, {"template": "report", "headline_lines": ["X"], "caption": "x per ESPN?"}, R.load_playbook("huddle"), 800)
+    res = lint(b, {"template": "report", "headline_lines": ["X"], "caption": "x per ESPN?"}, R.load_playbook("demo-sports"), 800)
     assert any("link-text" in e for e in res["errors"])
     L.add_source_text(d, "The Bears ruled Tyson Bagent out for Monday night, per ESPN.", "https://espn.com/s")
     assert json.loads((d / "brief.json").read_text())["posts"][0]["read_by"] == "routine"
@@ -158,8 +158,8 @@ def test_reddit_gallery_through_the_archive(monkeypatch, tmp_path, cfg):
     a = L.read_link("https://www.reddit.com/r/interestingasfuck/comments/1wlb5ct/nasa_has_released/")
     assert a["title"].startswith("NASA") and a["images"] == ["https://i.redd.it/bbbbbbbbbbbbb.png",
                                                              "https://i.redd.it/aaaaaaaaaaaaa.jpg"]
-    req = {"id": "culture-rush-2-x", "url": "https://www.reddit.com/r/interestingasfuck/comments/1wlb5ct/nasa_has_released/",
-           "page": "culture-rush", "note": "No edits post images as is", "at": 1}
+    req = {"id": "demo-celeb-2-x", "url": "https://www.reddit.com/r/interestingasfuck/comments/1wlb5ct/nasa_has_released/",
+           "page": "demo-celeb", "note": "No edits post images as is", "at": 1}
     b = json.loads((L.write_link_brief(tmp_path, req, cfg) / "brief.json").read_text())
     assert not b["link"]["read_error"] and [p["url"] for p in b["photos"]] == a["images"]
 
@@ -188,14 +188,14 @@ def test_reddit_embed_page_when_the_archive_has_nothing(monkeypatch):
 
 def test_as_is_posts_the_editors_images_unedited(tmp_path):
     from bore import routine as R
-    d = tmp_path / "culture-rush-202610160900-link-mars"
+    d = tmp_path / "demo-celeb-202610160900-link-mars"
     (d / "photos").mkdir(parents=True)
     photos = []
     for i, (w, h) in enumerate([(1170, 1463), (3000, 2000), (1955, 1019)]):
         Image.new("RGB", (w, h), (20 * i, 40, 60)).save(d / f"photos/{i}.jpg", "JPEG")
         photos.append({"index": i, "file": f"photos/{i}.jpg", "url": f"https://i.redd.it/{i}.jpg", "source": "link",
                        "credit": "reddit.com", "size": f"{w}x{h}"})
-    brief = {"id": d.name, "page": "culture-rush", "page_name": "Culture Rush", "photos": photos, "posts": [],
+    brief = {"id": d.name, "page": "demo-celeb", "page_name": "Demo Celeb", "photos": photos, "posts": [],
              "verification": {"route": "manual"}, "link": {"request_id": "r1", "url": "https://reddit.com/x", "note": "as is"}}
     copy = {"as_is": True, "photos": [2, 0, 1], "photo_index": 2, "caption": "x", "headline_lines": ["MARS"]}
     (d / "brief.json").write_text(json.dumps(brief))
@@ -207,12 +207,12 @@ def test_as_is_posts_the_editors_images_unedited(tmp_path):
     p = R.draft_payload(d)
     assert p["as_is"] and len(p["extra_images_b64"]) == 2 and p["engine"] == "as-is"
     # only an editor's request can ask for it
-    errs = lint({**brief, "link": None}, copy, R.load_playbook("culture-rush"), 800)["errors"]
+    errs = lint({**brief, "link": None}, copy, R.load_playbook("demo-celeb"), 800)["errors"]
     assert any("as_is is only" in e for e in errs)
-    errs = lint({**brief, "link": {**brief["link"], "note": "make it high ctr"}}, copy, R.load_playbook("culture-rush"), 800)["errors"]
+    errs = lint({**brief, "link": {**brief["link"], "note": "make it high ctr"}}, copy, R.load_playbook("demo-celeb"), 800)["errors"]
     assert any("as_is is only" in e for e in errs)
     for note in ("No edits post images as is", "dont do any branding on the image whatsoever"):
-        errs = lint({**brief, "link": {**brief["link"], "note": note}}, copy, R.load_playbook("culture-rush"), 800)["errors"]
+        errs = lint({**brief, "link": {**brief["link"], "note": note}}, copy, R.load_playbook("demo-celeb"), 800)["errors"]
         assert not any("as_is" in e for e in errs), (note, errs)
 
 
@@ -229,11 +229,11 @@ def test_feedback_on_an_as_is_post_keeps_its_images_in_order(tmp_path, cfg, monk
     jpg = _jpeg(1200, 900)
     monkeypatch.setattr(requests, "get", lambda url, **k: types.SimpleNamespace(ok=True, content=jpg + url.encode()))
     snap = {"posts": [{"text": "NASA photos"}], "photos": [{"url": f"https://i.redd.it/{n}.jpg", "source": "link"} for n in "abc"]}
-    req = {"id": "culture-rush-202610160900-link-mars", "page": "culture-rush", "feedback": "punchier caption",
+    req = {"id": "demo-celeb-202610160900-link-mars", "page": "demo-celeb", "feedback": "punchier caption",
            "brief": snap, "copy": {"as_is": True, "photos": [2, 0], "photo_index": 2}, "link_note": "post images as is",
            "source_photo": "https://i.redd.it/c.jpg", "reference_image_url": "https://img.example.com/upload.jpg"}
     b = json.loads((R.write_regen_brief(tmp_path, req, cfg) / "brief.json").read_text())
     reg = b["regeneration"]
     assert reg["as_is"] and [b["photos"][i]["url"] for i in reg["as_is_photos"]] == ["https://i.redd.it/c.jpg", "https://i.redd.it/a.jpg"]
     copy = {"as_is": True, "photos": reg["as_is_photos"], "photo_index": reg["as_is_photos"][0], "caption": "x"}
-    assert not any("as_is" in e for e in lint(b, copy, R.load_playbook("culture-rush"), 800)["errors"])
+    assert not any("as_is" in e for e in lint(b, copy, R.load_playbook("demo-celeb"), 800)["errors"])

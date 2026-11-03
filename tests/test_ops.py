@@ -91,9 +91,9 @@ def test_ok_is_worked_out_from_how_the_command_ended(sent, monkeypatch, capsys):
         def mark(args, cfg, code=code):
             raise SystemExit(code)
         with pytest.raises(SystemExit):
-            _run(["publish", "mark", "huddle-1", "--status", "failed"], mark, monkeypatch, "cmd_publish")
+            _run(["publish", "mark", "demo-sports-1", "--status", "failed"], mark, monkeypatch, "cmd_publish")
         assert sent[-1]["ok"] is ok and sent[-1]["summary"]["exit"] == code
-    assert sent[-1]["routine"] == "publisher" and sent[-1]["summary"]["target"] == "huddle-1"
+    assert sent[-1]["routine"] == "publisher" and sent[-1]["summary"]["target"] == "demo-sports-1"
 
     monkeypatch.setenv("APIFY_TOKEN", "apify_api_VerySecretValue123")
 
@@ -126,11 +126,11 @@ def test_the_documented_gates_are_answers_and_a_stop_is_not(sent, monkeypatch):
             (["routine", "skip", "d", "--reason", "r"], "cmd_routine",
              "REFUSED: this is an editor's link, never skipped (ROUTINE.md 2b/2c). Make the post", True),
             (["routine", "lint", "d"], "cmd_routine", "REFUSED: an editor's link or regeneration is never skipped", True),
-            (["publish", "mark", "huddle-1", "--status", "scheduled"], "cmd_publish",
-             "NOT FOUND huddle-1: the QueuedPosts result has no post with this caption. Call QueuedPosts again", True),
+            (["publish", "mark", "demo-sports-1", "--status", "scheduled"], "cmd_publish",
+             "NOT FOUND demo-sports-1: the QueuedPosts result has no post with this caption. Call QueuedPosts again", True),
             (["publish", "preflight", "--error", "locked"], "cmd_publish", 4, True),
             (["publish", "preflight", "--error", "locked"], "cmd_publish", 1, False),
-            (["publish", "mark", "huddle-1", "--status", "scheduled"], "cmd_publish", 5, False),
+            (["publish", "mark", "demo-sports-1", "--status", "scheduled"], "cmd_publish", 5, False),
             (["routine", "state", "--action", "push"], "cmd_routine",
              "STATE NOT SAVED: the push was refused. The dashboard keeps its copy: report it and stop.", False),
             (["routine", "state", "--action", "pull"], "cmd_routine", "STATE NOT RESTORED: not a gzip file", False)):
@@ -143,26 +143,26 @@ def test_the_documented_gates_are_answers_and_a_stop_is_not(sent, monkeypatch):
 
     # how a `publish mark` ended, from its last outcome line (a STOP after its NEEDS ACTION note)
     def stop(args, cfg):
-        print("NEEDS ACTION huddle-1: recorded for a person: 2 copies are queued in SocialPilot: delete all but one")
-        print("STOP huddle-1: 2 copies are queued in SocialPilot: delete all but one. Do not schedule anything else")
+        print("NEEDS ACTION demo-sports-1: recorded for a person: 2 copies are queued in SocialPilot: delete all but one")
+        print("STOP demo-sports-1: 2 copies are queued in SocialPilot: delete all but one. Do not schedule anything else")
         raise SystemExit(5)
     with pytest.raises(SystemExit):
-        _run(["publish", "mark", "huddle-1", "--status", "scheduled"], stop, monkeypatch, "cmd_publish")
+        _run(["publish", "mark", "demo-sports-1", "--status", "scheduled"], stop, monkeypatch, "cmd_publish")
     assert sent[-1]["ok"] is False and sent[-1]["summary"]["outcome"] == "stop"
-    _run(["publish", "mark", "huddle-1", "--status", "missing"],
-         lambda a, c: print("MISSING huddle-1: not found by this run (1 of 2): a later run looks again"), monkeypatch, "cmd_publish")
+    _run(["publish", "mark", "demo-sports-1", "--status", "missing"],
+         lambda a, c: print("MISSING demo-sports-1: not found by this run (1 of 2): a later run looks again"), monkeypatch, "cmd_publish")
     assert sent[-1]["ok"] is True and sent[-1]["summary"]["outcome"] == "missing"
 
 
 def test_one_degraded_call_or_catch_all_line_makes_the_run_amber(sent, monkeypatch, capsys, tmp_path):
     run = tmp_path / "20261021-1405"
     run.mkdir()
-    (run / "run.json").write_text(json.dumps({"regenerations": ["huddle-1"], "links": [], "created_today": {"huddle": 3}}))
+    (run / "run.json").write_text(json.dumps({"regenerations": ["demo-sports-1"], "links": [], "created_today": {"demo-sports": 3}}))
 
     def prepare(args, cfg):
         print("budget: $1.00 of $16.00 used this cycle; today $0.10 of $0.53 allowance (30.0 days left)")
         print("recent posts unavailable (HTTPSConnectionPool(host='bore-dashboard.vercel.app'): SSLEOFError)")
-        print("Huddle Room: quota 2 this run, 5 candidate(s)")
+        print("Demo Sports: quota 2 this run, 5 candidate(s)")
         print("  skipped repeat: Some story -> earlier")
         print("    faces not compared (ImportError: cannot import name '_imaging')")
         print("reddit: skipped by pacer (needs ~$0.120; $0.500/$0.530 used today)")
@@ -176,9 +176,9 @@ def test_one_degraded_call_or_catch_all_line_makes_the_run_amber(sent, monkeypat
     assert end["ok"] is True
     assert end["degraded"] == ["recent posts unavailable", "faces not compared (ImportError)", "other outlets' photos unavailable"]
     s = end["summary"]
-    assert s["pages"] == {"Huddle Room": {"quota": 2, "candidates": 5, "repeats": 1, "filtered": 0}}
+    assert s["pages"] == {"Demo Sports": {"quota": 2, "candidates": 5, "repeats": 1, "filtered": 0}}
     assert s["pacer_skipped"] == ["reddit"] and s["budget"].startswith("$1.00 of $16.00")
-    assert (s["run"], s["regenerations"], s["links"], s["created_today"]) == (run.name, 1, 0, {"huddle": 3})
+    assert (s["run"], s["regenerations"], s["links"], s["created_today"]) == (run.name, 1, 0, {"demo-sports": 3})
     assert "run report: degraded (recent posts unavailable" in capsys.readouterr().err
     _run(["routine", "status"], lambda a, c: print("fine"), monkeypatch)
     assert sent[-1]["degraded"] == [], "each command starts clean"
@@ -264,27 +264,27 @@ def test_the_routine_is_named_by_the_command_or_the_session(sent, monkeypatch):
 
 def test_routine_check_reports_pages_and_open_editor_requests(sent, monkeypatch, tmp_path):
     run = tmp_path / "20261021-1405"
-    for name, brief, marker in (("1-a", {"page": "huddle", "rank": 1}, "uploaded"), ("2-b", {"page": "huddle", "rank": 2}, None),
-                                ("3-link", {"page": "huddle", "link": {"request_id": "r1"}}, None)):
+    for name, brief, marker in (("1-a", {"page": "demo-sports", "rank": 1}, "uploaded"), ("2-b", {"page": "demo-sports", "rank": 2}, None),
+                                ("3-link", {"page": "demo-sports", "link": {"request_id": "r1"}}, None)):
         (run / name).mkdir(parents=True)
         (run / name / "brief.json").write_text(json.dumps(brief))
         if marker:
             (run / name / marker).write_text("")
-    (run / "run.json").write_text(json.dumps({"quota": {"huddle": 1}}))
+    (run / "run.json").write_text(json.dumps({"quota": {"demo-sports": 1}}))
     with pytest.raises(SystemExit, match="NOT DONE"):        # an open link keeps the check from passing
         cli.main(["routine", "check", str(run)])
     end = sent[-1]
     s = end["summary"]
     assert end["ok"] is True and s["refused"].startswith("NOT DONE")        # a gate, not a crash
-    assert s["check"] == "NOT DONE" and s["pages"]["huddle"]["quota"] == 1 and s["pages"]["huddle"]["uploaded"] == 1
+    assert s["check"] == "NOT DONE" and s["pages"]["demo-sports"]["quota"] == 1 and s["pages"]["demo-sports"]["uploaded"] == 1
     assert s["requests_open"] == ["3-link"], "an editor's link with no upload and no fail is still owed"
 
     # reported back to the editor with link-fail / regen-fail: settled (this session ran it, or its marker is there)
     real = cli.cmd_routine
     _run(["routine", "link-fail", str(run / "3-link"), "--reason", "the page cannot be read"], lambda a, c: None, monkeypatch)
     monkeypatch.setattr(cli, "cmd_routine", real)
-    for name, brief in (("4-regen", {"page": "huddle", "regeneration": {"replaces": "huddle-x"}}),
-                        ("5-link", {"page": "huddle", "link": {"request_id": "r2"}})):
+    for name, brief in (("4-regen", {"page": "demo-sports", "regeneration": {"replaces": "demo-sports-x"}}),
+                        ("5-link", {"page": "demo-sports", "link": {"request_id": "r2"}})):
         (run / name).mkdir()
         (run / name / "brief.json").write_text(json.dumps(brief))
     (run / "4-regen" / "request_failed.json").write_text("{}")
@@ -293,7 +293,7 @@ def test_routine_check_reports_pages_and_open_editor_requests(sent, monkeypatch,
         cli.main(["routine", "check", str(run)])
     s = sent[-1]["summary"]
     assert s["requests_failed"] == ["3-link", "4-regen"] and s["requests_open"] == ["5-link"]
-    assert s["pages"]["huddle"]["failed"] == 2
+    assert s["pages"]["demo-sports"]["failed"] == 2
     (run / "5-link" / "uploaded").write_text("")
     cli.main(["routine", "check", str(run)])
     assert sent[-1]["summary"]["check"] == "OK" and sent[-1]["summary"]["requests_open"] == []
@@ -317,15 +317,18 @@ def test_publish_plan_reports_what_needs_a_person(sent, monkeypatch):
 
     class Dash:
         def queue(self):
-            return {"queue": [{"id": "huddle-upd", "page": "huddle", "approved_at": now - 60, "update_of": "huddle-orig"},
+            live = {"socialpilot_login_id": "9100001"}
+            return {"queue": [{"id": "demo-sports-upd", "page": "demo-sports", "approved_at": now - 60, "update_of": "demo-sports-orig", **live},
                               {"id": "newpage-1", "page": "newpage", "approved_at": now - 60}],
-                    "scheduled": [{"id": "huddle-orig", "page": "huddle", "scheduled_for": when}], "in_progress": [],
+                    "waiting": [{"id": "paused-1", "page": "paused-page", "why": "the page is paused"}],
+                    "scheduled": [{"id": "demo-sports-orig", "page": "demo-sports", "scheduled_for": when}], "in_progress": [],
                     "socialpilot": {}}
     monkeypatch.setattr(cli, "_dashboard", lambda: Dash())
     cli.main(["publish", "plan"])
     end = sent[-1]
     s = end["summary"]
-    assert s["to_schedule"] == 1 and s["delete_in_socialpilot"] == ["huddle-orig"] and s["no_account"] == ["newpage-1"]
+    assert s["to_schedule"] == 1 and s["delete_in_socialpilot"] == ["demo-sports-orig"] and s["no_account"] == ["newpage-1"]
+    assert s["page_not_live"] == ["paused-1"]
     # the plan ran fine: what a person must do is the health status's own reason (from these lists),
     # never a degraded run that turns red after 3 plans
     assert end["ok"] is True and end["degraded"] == []
@@ -353,7 +356,7 @@ def test_the_health_status_reads_the_publishers_notes_as_urgent_unless_they_only
     publish_md = (ops.ROOT / "PUBLISH.md").read_text()
     example = re.search(r'--status needs_action --error "<what to do, e\.g\. ([^>]+)>"', publish_md)[1]
     assert urgent(example), example
-    tz, ours, never = "Asia/Kolkata", "2662938", "2662937"
+    tz, ours, never = "Asia/Kolkata", "9100002", "9100009"
     now = int(time.time()) // 60 * 60
     local = lambda t, f="%Y-%m-%d %H:%M": datetime.fromtimestamp(t, ZoneInfo(tz)).strftime(f)   # noqa: E731
     post = lambda t, login=ours, caption="The approved caption, word for word.": {        # noqa: E731
@@ -399,38 +402,38 @@ def test_the_setup_docs_stop_on_each_way_ensure_deps_gives_up():
 
 def test_studio_jobs_and_feed_publish_summaries(sent, monkeypatch, tmp_path):
     def jobs(args, cfg):
-        print("LEAVE  huddle-1-ab (compose): packages not loading on this machine")
-        print("JOB    work/studio/huddle-2-cd  IDEAS  page huddle")
+        print("LEAVE  demo-sports-1-ab (compose): packages not loading on this machine")
+        print("JOB    work/studio/demo-sports-2-cd  IDEAS  page demo-sports")
     _run(["studio", "jobs"], jobs, monkeypatch, "cmd_studio")
     s = sent[-1]["summary"]
-    assert s["taken"] == [{"id": "huddle-2-cd", "kind": "ideas", "page": "huddle"}] and s["left"] == ["huddle-1-ab"]
+    assert s["taken"] == [{"id": "demo-sports-2-cd", "kind": "ideas", "page": "demo-sports"}] and s["left"] == ["demo-sports-1-ab"]
     assert sent[-1]["degraded"] == ["left a Studio job: packages not loading on this machine"]
 
     import time
     now = time.time()
     ms = lambda ago: int((now - ago) * 1000)                    # noqa: E731 - the feed's times, as prepare_feed writes them
     (tmp_path / "feed").mkdir()
-    (tmp_path / "feed" / "huddle.json").write_text(json.dumps({"page": "huddle", "stories": [
+    (tmp_path / "feed" / "demo-sports.json").write_text(json.dumps({"page": "demo-sports", "stories": [
         {"id": "a", "published_at": ms(3600), "summary": "Whole sentence.", "images": [{"id_match": "match"}], "images_v": 5},
         {"id": "b", "published_at": ms(6 * 3600), "summary": "Cut off due to a", "images": [], "images_v": 0},
         {"id": "c", "published_at": ms(20 * 3600), "needs_writing": True, "images": [{"id_match": "mismatch"}], "images_v": 5}]}))
-    (tmp_path / "feed" / "culture-rush.json").write_text(json.dumps({"stories": [{"id": "d", "published_at": now - 600}]}))
+    (tmp_path / "feed" / "demo-celeb.json").write_text(json.dumps({"stories": [{"id": "d", "published_at": now - 600}]}))
     _run(["studio", "feed-publish", "--run", str(tmp_path)], lambda a, c: None, monkeypatch, "cmd_studio")
     assert sent[-1]["routine"] == "topics"
     pages = sent[-1]["summary"]["pages"]
-    assert pages["huddle"] == {"stories": 3, "newest_min": 60, "in_3h": 1, "in_12h": 2, "written": 2,
+    assert pages["demo-sports"] == {"stories": 3, "newest_min": 60, "in_3h": 1, "in_12h": 2, "written": 2,
                                "unwritten": 1, "cut_summaries": 1, "no_images": 1, "unchecked": 1,
                                "face_match": 1, "face_mismatch": 1}
-    assert pages["huddle"]["in_3h"] < pages["huddle"]["stories"]
-    assert (pages["culture-rush"]["newest_min"], pages["culture-rush"]["in_3h"]) == (10, 1), "seconds are read too"
+    assert pages["demo-sports"]["in_3h"] < pages["demo-sports"]["stories"]
+    assert (pages["demo-celeb"]["newest_min"], pages["demo-celeb"]["in_3h"]) == (10, 1), "seconds are read too"
 
 
 def test_health_warnings_never_carry_source_names(sent, monkeypatch):
     def health(args, cfg):
-        print("WARN  huddle: 5 handle(s) produced nothing in 72h (renamed/suspended?): SecretHandleOne, SecretHandleTwo")
+        print("WARN  demo-sports: 5 handle(s) produced nothing in 72h (renamed/suspended?): SecretHandleOne, SecretHandleTwo")
         print("WARN  x: last error: HTTPSConnectionPool(host='api.apify.com')")
     _run(["health"], health, monkeypatch, "cmd_health")
-    assert sent[-1]["summary"]["warnings"] == ["huddle: N handle(s) produced nothing in Nh", "x: last error"]
+    assert sent[-1]["summary"]["warnings"] == ["demo-sports: N handle(s) produced nothing in Nh", "x: last error"]
     assert "Secret" not in json.dumps(sent)
 
 
