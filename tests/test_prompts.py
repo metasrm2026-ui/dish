@@ -85,7 +85,11 @@ def test_the_five_routines_are_in_the_repo_with_their_settings():
         assert "metasrm2026-ui/dish (branch main)" in prompt and "repo dish" in prompt, name
         for var in ("DASHBOARD_URL", "ROUTINE_SECRET") + (("APIFY_TOKEN",) if name in ("hourly", "onboarding") else ()):
             assert var in prompt, f"{name}: reads {var} from the environment"
-        assert "come from the environment's secrets" in prompt and "Never write a .env file" in prompt, name
+        # Dish's own variable names (the cloud environment is shared with another product's routines),
+        # written for the CLI by one printf that never shows a value
+        assert "DISH_DASHBOARD_URL" in prompt and "DISH_ROUTINE_SECRET" in prompt, name
+        assert "printf 'DASHBOARD_URL=%s\\nROUTINE_SECRET=%s\\n' \"$DISH_DASHBOARD_URL\" \"$DISH_ROUTINE_SECRET\" > .env" in prompt, name
+        assert "Never put a secret's value in any other file, a command or your summary" in prompt, name
     assert "socialpilot" in cfg["triggers"]["publisher"]["connectors"]
     # the publisher stays isolated: only it schedules; the onboarding routine reads AccountList and nothing else
     assert {n for n, t in cfg["triggers"].items() if "socialpilot" in t["connectors"]} == {"publisher", "onboarding"}
