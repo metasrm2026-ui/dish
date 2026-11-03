@@ -1,22 +1,23 @@
 # The pipeline's health, checked every hour from outside the routines (a routine that dies cannot
 # say so): restarts or fails stalled Studio jobs (POST /api/routine/watchdog, which answers with the
 # health status worked out then; GET /api/routine/health only when it gave none), and keeps one
-# issue "Bore health: RED" open while something is broken. GitHub emails new issues and comments to
+# issue "Bore Studio health: RED" open while something is broken. GitHub emails new issues and comments to
 # the repository owner. Red opens it at once, amber after 3 checks in a row; green closes it. The
 # issue carries reason codes and ids only: the texts stay on the dashboard (review page banner,
 # admin Health tab).
 # Owner, once: repository Settings > Secrets and variables > Actions > New repository secret
-# BORE_ROUTINE_SECRET = the dashboard's ROUTINE_SECRET (optional variable BORE_DASHBOARD_URL).
+# STUDIO_ROUTINE_SECRET = the dashboard's ROUTINE_SECRET, and variable STUDIO_DASHBOARD_URL = the
+# dashboard's address (https://...). Without both the check only says so.
 name: health
 on:
   schedule:
-    - cron: "17 * * * *"                 # between the routines' :05, :25 and :35
+    - cron: "27 * * * *"                 # between the routines' :15, :40 and :50
   workflow_dispatch: {}
 permissions:
   issues: write
   contents: read
 concurrency:
-  group: bore-health
+  group: studio-health
   cancel-in-progress: false
 jobs:
   health:
@@ -25,13 +26,13 @@ jobs:
     steps:
       - uses: actions/github-script@v7
         env:
-          SECRET: ${{ secrets.BORE_ROUTINE_SECRET }}
-          DASHBOARD: ${{ vars.BORE_DASHBOARD_URL || 'https://bore-dashboard.vercel.app' }}
+          SECRET: ${{ secrets.STUDIO_ROUTINE_SECRET }}
+          DASHBOARD: ${{ vars.STUDIO_DASHBOARD_URL }}
         with:
           script: |
-            const secret = process.env.SECRET, base = process.env.DASHBOARD.replace(/\/+$/, '');
-            if (!secret) {
-              core.notice('BORE_ROUTINE_SECRET is not set: add it (Settings > Secrets and variables > Actions) to turn the health check on.');
+            const secret = process.env.SECRET, base = (process.env.DASHBOARD || '').replace(/\/+$/, '');
+            if (!secret || !base) {
+              core.notice('STUDIO_ROUTINE_SECRET or STUDIO_DASHBOARD_URL is not set: add them (Settings > Secrets and variables > Actions) to turn the health check on.');
               return;
             }
             async function call(method, path) {
@@ -58,8 +59,8 @@ jobs:
                       + ` (watchdog: ${wd.error || `${wd.open_jobs} open job(s), ${streak} bad check(s) in a row`})`);
             const { owner, repo } = context.repo;
             const issues = await github.paginate(github.rest.issues.listForRepo, { owner, repo, state: 'open', per_page: 100 });
-            const issue = issues.find(i => !i.pull_request && i.title.startsWith('Bore health:'));
-            const title = `Bore health: ${status.toUpperCase()}`;
+            const issue = issues.find(i => !i.pull_request && i.title.startsWith('Bore Studio health:'));
+            const title = `Bore Studio health: ${status.toUpperCase()}`;
             const body = [`Status **${status.toUpperCase()}**, checked ${new Date().toISOString()}.`, '',
               ...reasons.map(r => `- ${r.level} \`${r.code}\`${r.since ? ` since ${new Date(r.since).toISOString()}` : ''}`
                                   + `${(r.ids || []).length ? `: ${r.ids.map(x => `\`${x}\``).join(', ')}` : ''}`),

@@ -1466,7 +1466,9 @@ def _routine_krea_request(args, cfg, R):
                  f"Use `bore routine fallback {args.dir}`.")
     except Exception as e:
         why = _krea_unavailable(e)
-        if studio:
+        # Studio, or a session whose database was not restored (the onboarding's first run): no ledger of
+        # its own to count on, so no image it cannot have counted
+        if studio or _krea_ledger(store, cap, cfg) is None:
             sys.exit(f"KREA UNCHECKED: the shared Krea allowance could not be read ({type(e).__name__}). "
                      f"Use `bore routine fallback {args.dir}`.")
         # this routine's own images and Studio's as last known: Studio's of today against today's
@@ -1944,6 +1946,12 @@ def cmd_studio(args, cfg):
             S.precheck(d, send=getattr(args, "send", False))
 
 
+# ------------------------------------------------------------------ onboarding (ONBOARD.md)
+def cmd_onboard(args, cfg):
+    from . import onboard as O
+    O.run(args, cfg)
+
+
 def cmd_refresh(args, cfg):
     from .refresh import refresh
     store = _store(cfg)
@@ -2149,6 +2157,19 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--queued", help="mark --status scheduled: a file with the QueuedPosts result that shows the post")
     s.add_argument("--result", action="append", help="preflight: a file with the AccountList (or UserInfo) result")
     s.set_defaults(fn=cmd_publish)
+
+    # the onboarding routine (ONBOARD.md): one page's Go live, step by step
+    s = sub.add_parser("onboard", help="onboarding routine: claim a Go live job, link, sources, playbook, first run")
+    s.add_argument("step", choices=["jobs", "step", "link", "sources", "playbook", "templates", "first-run", "done", "fail"])
+    s.add_argument("id", nargs="?", metavar="slug", help="the page's slug (all but jobs)")
+    s.add_argument("what", nargs="?", help="step: the step's name; sources/playbook: the file; fail: the reason for the tester")
+    s.add_argument("--ok", action="store_true", help="step: it worked")
+    s.add_argument("--fail", action="store_true", help="step: it did not")
+    s.add_argument("--detail", help="step: what happened, in plain words (the tester reads it)")
+    s.add_argument("--login-id", help="link: the SocialPilot loginId of the page's Facebook account")
+    s.add_argument("--name", help="link: that account's name as SocialPilot lists it")
+    s.add_argument("--accounts", help="link: a file with the AccountList result, exactly as it came back")
+    s.set_defaults(fn=cmd_onboard)
 
     s = sub.add_parser("budget", help="show spend vs the monthly budget")
     s.set_defaults(fn=cmd_budget)

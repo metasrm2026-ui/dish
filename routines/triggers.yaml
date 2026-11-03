@@ -1,37 +1,53 @@
-# The routine triggers (claude.ai/code scheduled tasks), kept here so a change to a prompt, its
-# model or its connectors is reviewed and tested like code (tests/test_prompts.py). The live
-# triggers are set by hand: paste routines/<name>.prompt.md into the trigger, only once
-# ROUTINE_SECRET and APIFY_TOKEN are set in the environment's secrets (the prompts carry no values:
-# step 2 stops a session that does not find them there).
-environment: env_01Y5isNPRHkmR9Gbd3XoFYgv
-branch: claude/sleepy-cray-a7pcek
-secrets: [ROUTINE_SECRET, APIFY_TOKEN]          # names only: the values live in the environment's secrets
+# Bore Studio's five routines (claude.ai/code scheduled tasks on the product's own repository), kept
+# here so a change to a prompt, its model or its connectors is reviewed and tested like code
+# (tests/test_prompts.py). The live triggers are set by hand (README "The five routines"): paste
+# routines/<name>.prompt.md into the trigger, only once DASHBOARD_URL, ROUTINE_SECRET and
+# APIFY_TOKEN are set in the environment's secrets (the prompts carry no values: step 2 stops a
+# session that does not find them there). Put each trigger's id here once it exists.
+# The API-triggered ones are fired by the dashboard: its <fire>_URL / <fire>_TOKEN Vercel variables
+# hold the trigger's fire URL and token (scripts/setup-vercel.sh leaves them for the owner).
+repository: metasrm2026-ui/bore-studio
+environment: null                               # the product's own cloud environment (its env_... id)
+branch: main
+secrets: [DASHBOARD_URL, ROUTINE_SECRET, APIFY_TOKEN]   # names only: the values live in the environment's secrets
 triggers:
   hourly:
-    id: trig_0173AyLHxCdPvoJcaSoyjR8E
-    schedule: "5 * * * *"
+    id: null
+    schedule: "15 * * * *"                      # posts for every live page, within its budget
+    fire: null
     model: claude-sonnet-5
     connectors: [krea]
     prompt: routines/hourly.prompt.md
     doc: ROUTINE.md
   publisher:
-    id: trig_01WWAyWwh7eUJzMeBhMFDVQ1
-    schedule: "35 * * * *"                      # and fired by the dashboard on each approval (ROUTINE_FIRE_URL)
+    id: null
+    schedule: "40 * * * *"                      # and fired by the dashboard on each approval
+    fire: ROUTINE_FIRE
     model: claude-sonnet-4-6
     connectors: [socialpilot]
     prompt: routines/publisher.prompt.md
     doc: PUBLISH.md
   topics:
-    id: trig_018u4Snu57qAyu2nApxRPCTN
-    schedule: "25 * * * *"
-    model: default                              # owner: pin it (the account default can change under it)
+    id: null
+    schedule: "50 * * * *"                      # the Studio story feed
+    fire: null
+    model: claude-sonnet-5
     connectors: []
     prompt: routines/topics.prompt.md
     doc: TOPICS.md
   studio:
-    id: trig_011C5nipHsMt7Lcqbn6qGbTM
-    schedule: null                              # fired by the dashboard on each editor click and by the watchdog (STUDIO_FIRE_URL)
-    model: default                              # owner: pin it
-    connectors: []                              # no Krea: page designs use the fallback (attach Krea only after its cap is shared)
+    id: null
+    schedule: null                              # fired by the dashboard on each editor click and by the watchdog
+    fire: STUDIO_FIRE
+    model: claude-sonnet-5
+    connectors: [krea]                          # premium cards from the same shared monthly allowance
     prompt: routines/studio.prompt.md
     doc: STUDIO.md
+  onboarding:
+    id: null
+    schedule: null                              # fired by the dashboard when a tester presses Go live
+    fire: ONBOARD_FIRE
+    model: claude-sonnet-5
+    connectors: [socialpilot]                   # AccountList only (the prompt's rule): it never posts
+    prompt: routines/onboarding.prompt.md
+    doc: ONBOARD.md

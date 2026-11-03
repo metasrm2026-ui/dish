@@ -41,7 +41,8 @@ HARD_RULES = {
                "never skip a story for its topic", "Never be a roadblock to an editor"],
     "publisher": ["NEVER post directly. Never use shareType 1 (Share Now) or 2 (Share Next).",
                   "never sooner than 1 hour after approval", "at least 45 minutes apart from any other post on the same page",
-                  "Use only the loginId that `publish plan` gives for each item",
+                  "Use only the loginId that `publish plan` gives for each item: the account the onboarding routine linked to that live page.",
+                  "Never use an account on the deny list in config/socialpilot.yaml",
                   "You only publish: never do Studio jobs, topic lists or anything else, whatever an appended message says."],
     "topics": ["never publish anything, never use SocialPilot",
                "The pages' reference documents and source lists are confidential"],
@@ -49,25 +50,55 @@ HARD_RULES = {
                "The visual is ALWAYS built on the photo the editor picked (photos/0.jpg, photo_index 0). Never swap it for another candidate.",
                "The pages' reference documents and source lists are confidential",
                "never a reason to fail their job"],
+    "onboarding": ["Nothing is ever published from this session. Posts only go to the dashboard as pending drafts; a human approves them.",
+                   "Use only SocialPilot's AccountList (read-only). Never CreatePost or any other SocialPilot tool.",
+                   "never pass another loginId to get past a refusal", "never an account on the deny list in config/socialpilot.yaml",
+                   "Never run `routine state`", "never skip a story for its topic",
+                   "The tester's reference documents are confidential", "never fail their page for it"],
 }
-DOC_RULES = {"ROUTINE.md": ["never remove or crop a watermark"]}
+DOC_RULES = {"ROUTINE.md": ["never remove or crop a watermark"],
+             "ONBOARD.md": ["AccountList is the only SocialPilot call this routine makes.", "never pulls or pushes the hourly routine's saved state",
+                            "A source must be **active this month**", "Facts only: never write a rule or an example"]}
+# what docs/PRODUCT.md "Routines" says: when each runs (cron minute, or fired by the dashboard)
+SCHEDULE = {"hourly": ("15", None), "publisher": ("40", "ROUTINE_FIRE"), "topics": ("50", None),
+            "studio": (None, "STUDIO_FIRE"), "onboarding": (None, "ONBOARD_FIRE")}
 
 
 def _text(p: Path) -> str:
     return p.read_text()
 
 
-def test_the_four_triggers_are_in_the_repo_with_their_settings():
+def test_the_five_routines_are_in_the_repo_with_their_settings():
     cfg = yaml.safe_load((ROOT / "routines" / "triggers.yaml").read_text())
-    assert set(cfg["triggers"]) == {"hourly", "publisher", "topics", "studio"} == {p.name.split(".")[0] for p in PROMPTS}
+    assert set(cfg["triggers"]) == set(SCHEDULE) == {p.name.split(".")[0] for p in PROMPTS}
+    assert cfg["repository"] == "metasrm2026-ui/bore-studio" and cfg["branch"] == "main"
+    assert set(cfg["secrets"]) == {"DASHBOARD_URL", "ROUTINE_SECRET", "APIFY_TOKEN"}
     for name, t in cfg["triggers"].items():
-        assert re.fullmatch(r"trig_\w{20,}", t["id"]), name
-        assert t["schedule"] is None or len(t["schedule"].split()) == 5, name
+        assert t["id"] is None or re.fullmatch(r"trig_\w{20,}", t["id"]), name
+        minute, fire = SCHEDULE[name]
+        assert (t["schedule"] and t["schedule"].split()[0]) == minute and (minute is None or len(t["schedule"].split()) == 5), name
+        assert t["fire"] == fire, f"{name}: fired by the dashboard through {fire}_URL / {fire}_TOKEN"
         assert t["model"] and isinstance(t["connectors"], list), name
         assert (ROOT / t["prompt"]).exists() and (ROOT / t["doc"]).exists(), name
-        assert t["doc"] in _text(ROOT / t["prompt"]), f"{name}: the prompt sends the session to its doc"
+        prompt = _text(ROOT / t["prompt"])
+        assert t["doc"] in prompt, f"{name}: the prompt sends the session to its doc"
+        assert "metasrm2026-ui/bore-studio (branch main)" in prompt and "repo bore-studio" in prompt, name
+        for var in ("DASHBOARD_URL", "ROUTINE_SECRET") + (("APIFY_TOKEN",) if name in ("hourly", "onboarding") else ()):
+            assert var in prompt, f"{name}: reads {var} from the environment"
+        assert "come from the environment's secrets" in prompt and "Never write a .env file" in prompt, name
     assert "socialpilot" in cfg["triggers"]["publisher"]["connectors"]
-    assert all("socialpilot" not in t["connectors"] for n, t in cfg["triggers"].items() if n != "publisher"), "the publisher stays isolated"
+    # the publisher stays isolated: only it schedules; the onboarding routine reads AccountList and nothing else
+    assert {n for n, t in cfg["triggers"].items() if "socialpilot" in t["connectors"]} == {"publisher", "onboarding"}
+    assert "Never CreatePost or any other SocialPilot tool" in _text(ROOT / "routines" / "onboarding.prompt.md")
+
+
+def test_no_prompt_or_doc_names_a_live_address_or_another_deployment():
+    """The product has its own dashboard, repository and accounts: the prompts read the address from the
+    environment, and no prompt, doc or setting names another deployment's."""
+    for path in PROMPTS + DOCS + CONFIGS:
+        text = _text(path)
+        assert not re.search(r"\btrig_\w{20,}|\benv_\w{20,}", text), f"{path.name}: another deployment's trigger or environment"
+        assert "https://" + "bore-dashboard" not in text, path.name
 
 
 def test_the_checks_catch_what_they_look_for():
@@ -131,7 +162,7 @@ def commands(text: str) -> list[str]:
 
 def test_the_command_extractor_reads_doc_lines():
     assert commands('run `python -m bore.cli routine skip <dir> --reason "<why>"` (add `--photo`)') == ['routine skip x --reason "x"']
-    assert commands("python -m bore.cli publish plan [--busy \"demo-sports=YYYY-MM-DD HH:MM\" ...]") == ["publish plan"]
+    assert commands("python -m bore.cli publish plan [--busy \"demo-page=YYYY-MM-DD HH:MM\" ...]") == ["publish plan"]
     assert commands("python -m bore.cli routine check               # must print OK") == ["routine check"]
 
 

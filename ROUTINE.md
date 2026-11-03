@@ -1,9 +1,14 @@
 # Hourly routine: instructions for the Claude session
 
-You are running the hourly post-creation routine for the Facebook pages in `config/pages.yaml`
-(Huddle Room, Culture Rush). Your job this hour: turn this hour's verified stories into finished
-posts (infographic + caption) at the same quality as the pages' own posts, and put them on the
-approval dashboard. Nothing is published from here: a human approves every post.
+You are running the hourly post-creation routine for every live page of Bore Studio. Your job
+this hour: turn this hour's verified stories into finished posts (infographic + caption) at the
+same quality as each page's own posts, and put them on the approval dashboard. Nothing is
+published from here: a human approves every post.
+
+Each page's own rules (its niche, voice, caption rules, card templates, what it posts and never
+posts) are in its playbook and reference documents, which every brief carries. This file has the
+rules for every page; where a playbook is more specific, it wins, except over the rules on facts,
+photos, watermarks and crime and tragedy below.
 
 The quality bar is the pages' own posts. A post below that bar is worse than no post.
 
@@ -20,11 +25,12 @@ start" (Chromium, which draws every card), it has already tried to repair them: 
 stop. Cards cannot be checked or drawn on this machine (`prepare` refuses anyway).
 If the pull fails, run it once more. If it fails twice, report it and stop: do not run `prepare` and
 never push (both refuse anyway until a pull has restored the database; `--fresh` is only for a new
-database the owner asked for).
+database the product's owner asked for).
 
-Page settings, sources and playbooks are not in the repository: admins manage them in the
-dashboard's admin panel and `studio sync` brings them into `private/`. Pages marked "Studio
-only" get no hourly posts (quota 0) but their sources are collected for the Studio feed.
+Page settings, sources and playbooks are not in the repository: each page's owner manages them
+on the dashboard (the onboarding routine proposed the sources and wrote the playbook: ONBOARD.md),
+and `studio sync` brings them into `private/`. Only live pages get hourly posts: a paused page, or
+one still going live, gets quota 0.
 
 Secrets come from the environment: `APIFY_TOKEN`, `DASHBOARD_URL`, `ROUTINE_SECRET`.
 Krea runs through the **Krea connector** (your `generate_image` / `get_job` / `get_upload_url`
@@ -39,10 +45,12 @@ python -m bore.cli routine prepare
 `prepare` can take up to 10 minutes (collection, then photo checks): run it with a 10-minute
 command timeout, and don't start it twice.
 
-This reads the admins' websites from their own RSS feeds (free, every hour; a website with no
-feed is searched on Google instead), collects X / Reddit / web within the Apify budget, asks the dashboard how many posts each page
-already has today (daily cap 20 per page), selects this hour's picks plus backups, and writes one
-brief per story to `work/<run>/<id>/brief.json` with sharp candidate photos in `photos/`.
+This reads the websites among the page's sources from their own RSS feeds (free, every hour; a
+website with no feed is searched on Google instead), collects X / Reddit / web within the Apify
+budget, asks the dashboard how many posts each page already has today (each page's
+`posts_per_day`, within the limit the product's owner set), selects this hour's picks plus
+backups, and writes one brief per story to `work/<run>/<id>/brief.json` with sharp candidate
+photos in `photos/`.
 It also fetches posts a reviewer sent back from the dashboard with feedback (**REGEN** lines, see
 2b) and links editors pasted into "Post from a link" (**LINK** lines, see 2c). Both are briefed
 first, before any collection, and handled first, whatever the quota. If Apify cannot be used (no
@@ -75,7 +83,7 @@ candidate photo (`photos/*.jpg`) before choosing one.
 **Learn from the editors first.** `lessons` in the brief is what the editors' reviews teach, counted
 per story kind and rebuilt daily from every review (and within the hour of an editor's new note): `rules` (AVOID / BE PICKY / PREFER with counts and
 examples; EDITORS' NOTES: what their notes keep saying; PHOTO: kinds of photo editors reject for the
-image), `admin_notes` (the admins' own instructions: follow them), `notes` (the editors' latest 8 notes
+image), `admin_notes` (the page owner's own instructions: follow them), `notes` (the editors' latest 8 notes
 in their own words, with the reason, kind, template and headline of the post: follow them),
 `this_kind` (this story's kind, `brief.kind`, with its approvals, examples on both sides and older
 notes written about posts of this kind), `template_notes` (older notes about posts made with each card
@@ -95,30 +103,27 @@ far. BE PICKY kinds are approved about half the time: while the page is under qu
 unless the story has the weakness named in the rejected examples or notes. Skip AVOID kinds.
 Skipping costs posts too: editors can only approve what reaches them.
 Judge a kind by its own counts (`lessons.this_kind`), not by one rejected example and not by
-`editor_feedback.reasons`, which adds up every kind's rejections together. (Oct 12: Huddle skipped
-availability news as "the same kind as the 61 Weak-story rejections", which was the page's total for
-every kind, not that story's kind; Culture Rush skipped celebrity interviews as "like GARFIELD'S ALTMAN
-SHADE", one rejection, though editors have approved candid celebrity statements far more often than
-not, e.g. CAGE ROASTS MCU, RAVEN'S REGRET.)
+`editor_feedback.reasons`, which adds up every kind's rejections together (a page's total of "Weak
+story" rejections is every kind's, not this story's kind's; one rejected example of a kind editors
+usually approve is no reason to skip it).
 
 Skip the story (`"decision": "skip"`) when any of these hold:
 - it is outside the page's niche or scores below 8 for niche fit (playbook `worth_posting`). A
-  playbook's NO for politics/policy is about politicians and policy themselves: a household-name
-  star or TV host clashing with, mocking or answering a politician is the approved "celebrity
-  clashing with a politician/host" kind (editors approved MAMDANI SHUTS DOWN KIMMEL), and a flop
-  with a hard number is approved, not trade news (DIGGER BOMBS). `prepare` already drops stories
-  about institutions, elections, courts and wars when the playbook rules politics out (a verdict or
-  sentence, and the White House trading shots with someone, still reach you: judge those)
+  playbook's NO for politics/policy is about politicians and policy themselves: a well-known person
+  in the page's niche clashing with, mocking or answering a politician is about that person, and
+  judged as such. `prepare` already drops stories about institutions, elections, courts and wars
+  when the playbook rules politics out (a verdict or sentence, and a government trading shots with
+  someone, still reach you: judge those)
 - it is one of the playbook's REJECTED KINDS, or an AVOID kind in `lessons`
 - it is a private person's serious health crisis that they or their family have not made public
 - the sources don't actually support a clear, postable fact
 - route is `watchlist` (single source) and the source is not a credible reporter/outlet. A
-  website the page's admins chose as a source (`verification.admin_sources`) counts as credible
+  website the page's owner chose as a source (`verification.admin_sources`) counts as credible
   for this page, even if the playbook lists it under `trade_only_sources` (that list is about
   industry trade news on X): judge its stories on the niche and the story itself, word them as
   that outlet's report and attribute it in the caption ("per <outlet>")
 - it is a live in-game update that will be old news when it is read: a post reaches readers hours
-  after you write it (editors review in batches, around 07:00 and 23:00 IST, and the publisher
+  after you write it (editors review in batches, and the publisher
   schedules an approved post at least an hour after approval, at any time of day). Skip
   "questionable to return" and halftime or quarter stats; post the outcome instead (ruled out,
   final stat line, record, a game-winning play) when the sources have it
@@ -133,7 +138,7 @@ Photo rules:
 - Each photo in the brief says where it came from (`via`, `post_url`), how many outlets or accounts
   used the same picture (`consensus`) and any `flags`. Photos come in order: an HD frame of the
   story's video matching the picture other outlets used, that picture ("used by N outlets"), other
-  stills of the video, then the story's own photos. For a news event (Culture Rush), prefer the
+  stills of the video, then the story's own photos. For a news event, prefer the
   picture other outlets used over the article's own stock or file photo (flagged "other outlets
   used a different picture"); never use generic stock when such a picture exists. Pick a clean
   copy over a watermarked one; never remove or crop a watermark. `violent incident`: never a
@@ -141,7 +146,8 @@ Photo rules:
   vehicle alone is fine; editors can still choose otherwise in the Studio). Never use a photo
   flagged `scoreboard`, `text-heavy`, `wide broadcast shot`, `collage` or `much sharper than the
   footage` (possibly AI-enhanced). `soft`, `agency photo` and `file photo` are warnings: prefer
-  another when one is as good. Huddle Room never uses broadcast frames. A PHOTO rule in `lessons`
+  another when one is as good. Follow the playbook's own photo rules (a page may never use
+  broadcast frames, for example). A PHOTO rule in `lessons`
   (e.g. "editors rejected 4 of 6 posts whose photo was a video frame") is a warning of the same
   kind: prefer another candidate that passes the checks; if none does, the rule is no reason to skip.
   Among candidates that passed the same checks, the kinds editors kept come first (a tie-breaker).
@@ -149,18 +155,18 @@ Photo rules:
 - Use only real photographs of the story's subject. Never another outlet's designed graphic
   (logos, banners, composites, "THE SWEEP" style art) and never a photo showing unrelated people.
 - If no candidate is a sharp photo of the subject, find one:
-  `python -m bore.cli routine photos <dir> --query "<Full Name>"` (the player's team is found
-  automatically; results must name the person in full, as a phrase), then look at the new
+  `python -m bore.cli routine photos <dir> --query "<Full Name>"` (add `--team` for a player whose
+  name is common; results must name the person in full, as a phrase), then look at the new
   candidates. It prints what each source returned or why it failed: quote that in a skip reason.
-  The official NFL headshot (a studio portrait, offered last) is always the right player: use it
-  when no action photo of the player works, rather than skip the story. A tight headshot (the face
-  fills the frame) can still be `BLOCKED`: the renderer already tries the headline at the top and at
-  the bottom, and `quote` keeps no more of the photo clear than `report`. Then skip with `--photo`
-  (the story comes back when newer coverage brings a photo).
-  For injury or trade news, prefer a recent pro photo over a college-era one.
+  An official headshot (a studio portrait, offered last) is always the right person: use it when no
+  action photo of them works, rather than skip the story. A tight headshot (the face fills the
+  frame) can still be `BLOCKED`: the renderer already tries the headline at the top and at the
+  bottom of every layout. Then skip with `--photo` (the story comes back when newer coverage brings
+  a photo).
+  For news about someone's career now, prefer a recent photo over an old one.
 - Record in `people_in_photo` exactly who is visible. Every person listed must be in the story
-  (lint refuses a photo of someone else, e.g. McCarthy on a Brosmer post). Check the face really
-  is that person: jersey number, team, the photo's caption/title.
+  (lint refuses a photo of someone else, e.g. a teammate on a post about another player). Check
+  the face really is that person: jersey number, team, the photo's caption/title.
 - Faces are compared with the story subject's (`id_name`) reference face (`id_ref`: the ESPN
   headshot or the Wikipedia photo): `id_match: "match"` is that person; `"mismatch"` is a clear
   face of someone else ("may not be"; such photos come last, and lint warns when one is chosen:
@@ -174,13 +180,10 @@ Photo rules:
   wrong people and a card with no photo.
 - Every card needs a photo (lint refuses none). If no sharp photo of the subject exists, skip.
 
-Templates (playbook `template_rules`):
-- Culture Rush: `headline` for celebrity news (the renderer switches to `spotlight`, photo on
-  top, by itself when the face would touch the text; you may also choose `spotlight` directly).
-  `casefile` ONLY for true crime / mysteries / court cases, with `"story_type": "true_crime"`;
-  extra polaroids only via `extra_photo_indexes`, each a photo of a person in the case.
-- Huddle Room: `report` by default, `quote` for a real quote, `topic` only for a debate question
-  with a close photo.
+Templates (playbook `card.templates` and `template_rules`):
+- The playbook says which layout suits which story (`template_rules`) and which it allows
+  (`card.templates`, else every generic layout: headline, quote, stat_card, comparison,
+  then_vs_now, ranked_list, timeline). `default_template` when nothing more specific fits.
 - The page's own templates: when its editors have approved some, the brief lists them as
   `templates` (`id`, `name`, `use_when`, `visual_lane`, `art_layer`, `slots`; the spec itself is
   `file`, its format docs/TEMPLATE_SPEC.md). When one's `use_when` fits the story, draw it: set
@@ -190,7 +193,7 @@ Templates (playbook `template_rules`):
   are listed: never draw one that is not.
 
 The page's reference documents: when the brief lists `docs`, read them before writing (they are the
-page's own, uploaded by its admins, and confidential: use them, never copy them into the copy,
+page's own, uploaded by its owner, and confidential: use them, never copy them into the copy,
 notes, summaries or anywhere else):
 - `docs.tone.file` (caption language and tone): the page's voice for the card text and the caption.
   Where it and the playbook's `caption_rules` / `examples` disagree on voice, wording, length, emoji
@@ -210,10 +213,9 @@ to play is "LIKELY OUT", not "OUT". Don't repeat a number or fact across lines.
 
 ### Crime, abuse and tragedy are news
 
-These pages are news pages and report them (the owner, Oct 16: "we are a news company, we report
-whatever is there"). Never skip a story, or fail an editor's link, because it involves a crime,
-sexual violence, abuse of a child, a killing, terrorism, suicide or self-harm. Write it the way a
-careful newsroom does:
+These pages are news pages and report them: whatever the news is, it is reported. Never skip a
+story, or fail an editor's link, because it involves a crime, sexual violence, abuse of a child, a
+killing, terrorism, suicide or self-harm. Write it the way a careful newsroom does:
 - Facts only, from the sources, attributed ("per the BBC", "court records show"). Someone charged
   but not convicted is "accused" / "charged with" / "allegedly"; a conviction or sentence is fact.
 - Never identify a victim of sexual violence or any child victim: no name, photo, school, address
@@ -235,12 +237,13 @@ careful newsroom does:
   execution or recruitment images).
 - A photo of an accused or a perpetrator must come from coverage of THIS case: the link itself, or
   a news article about the case. Search with the case words and the name as --must
-  (`routine photos <dir> --query "Thomas Evans al-Shabaab" --must "Thomas Evans"`), never a bare
+  (`routine photos <dir> --query "Demo Smith fraud trial" --must "Demo Smith"`), never a bare
   name (other people share it). When no such photo exists, use the place or a still from coverage
   of the case, with no person in it, and say so in `note_to_editor`.
 - Terrorism: what happened and what is known; no slogans, no praise, no propaganda imagery.
 - Suicide and self-harm: no method or place, "died by suicide" (never "committed"), and the last
-  line before the hashtags is "If you or someone you know is struggling, call or text 988 (US)."
+  line before the hashtags is the crisis line of the page's audience ("If you or someone you know
+  is struggling, call or text 988 (US)." for a US audience).
 This section overrides any playbook worth_posting NO entry, caption rule, example or lessons rule
 for these topics. For stories you pick yourself, skip only when the story rests on one unverified claim, would need
 sexual or nude imagery of anyone, or would be about who a victim is. An editor's request (a link,
@@ -365,7 +368,7 @@ Deterministic checks against the source posts. Fix `copy.json` until it prints `
 
 ## 4. Make the infographic with Krea (premium cards)
 
-Krea makes the whole card (`krea.mode: premium`, the owner's choice): Nano Banana 2.1 takes the real
+Krea makes the whole card (config `krea.mode: premium`): Nano Banana 2.1 takes the real
 photo and the page's own card for this post (drawn first by the template renderer, with the exact
 card text, in the layout or approved template you chose) and turns them into a premium poster: the
 subject cut out into a dramatic scene, bold 3D or metallic lettering, depth and glow. About 22
@@ -395,16 +398,18 @@ python -m bore.cli routine verify <dir>        # mandatory gate: OCR of the fini
   ... --feedback "<the errors>"`, generate once more, `krea-result`, `verify`. If it fails again, use
   `python -m bore.cli routine fallback <dir>` (the template renderer's card) and `verify` that.
 - `BLOCKED` (the face can't be kept clear of the text in the layout): pick another photo of the
-  subject (step 2) and start again. Never switch a celebrity story to `casefile` to get around it.
-- `krea-request` prints `KREA CAP`, `KREA PACE` or `KREA UNCHECKED` (the month's images, shared with
-  Post Studio, are spread evenly over its days): use `routine fallback <dir>` and `verify` that card.
+  subject (step 2) and start again. Never switch to a template the story does not fit to get around it.
+- `krea-request` prints `KREA CAP`, `KREA PACE` or `KREA UNCHECKED` (the product's month of premium
+  cards, `krea.monthly_max_images`, shared with Post Studio and spread evenly over its days, or the
+  page's own `premium_per_day` used up, or the count could not be asked): use `routine fallback <dir>`
+  and `verify` that card. That is the safe card, never an error.
 - Without an upload URL (the connector has no `get_upload_url`), `krea-request <dir>` still works: the
   photo goes by its link and the layout is described in words.
 - Run `krea-request` again for the same card only if its output was lost: it asks for the same
   image, not a second one. Each `krea-request` reserves one image of the shared allowance, and
   `krea-result` tells the allowance it was made (a reservation never made stops counting after 45
   minutes). If `krea-result` prints `the shared count was not told this image was made`, carry on
-  with the card: the admin's Health tab says so.
+  with the card: the Health tab says so.
 - One of the page's templates (`template_spec`): fill its `slots` as usual; the layout image is that
   template drawn with them, so the premium card keeps its structure. `REFUSED: ... does not fit` (from
   `krea-request` or `fallback`): a slot is too long for its zone, shorten it.
@@ -456,7 +461,7 @@ is made and uploaded, or, only when it cannot be made at all, reported back with
 with a reason. Only save state once it passes. Include its per-page lines in the summary.
 If the push prints STATE NOT SAVED (the database was not restored, or lost more than half of the
 recent rows the pull brought), the dashboard keeps its copy: report it and stop. Never retry it with
-`--fresh`: that is for the owner, after checking the database.
+`--fresh`: that is for the product's owner, after checking the database.
 
 ## 7. Studio story feed
 
