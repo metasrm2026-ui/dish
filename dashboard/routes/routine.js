@@ -1,6 +1,8 @@
 // /api/routine/*  (routines only: Bearer ROUTINE_SECRET) the server side of the AI steps.
-//   GET  config            active pages: sources, guidance, the text of each reference document and the
-//                          approved template specs (routes/templates.js)
+//   GET  config            every page (not archived): status, workspace, budgets, its SocialPilot account,
+//                          onboarding, sources, guidance, the text of each reference document and the
+//                          approved template specs (routes/templates.js); and the deny list. Only live pages
+//                          are worked by the hourly, topics and publisher routines (they filter by status).
 //   GET  doc?page&type&part  the active reference PDF itself, part by part (config's docs.<type>.parts)
 //   GET  feed?page         the page's current story feed;  POST feed {page, stories}
 //   GET  jobs              queued Studio jobs, with the batch posts they act on (a templates job: the page's templates so far)
@@ -13,8 +15,12 @@
 //                          ended_at, ok, degraded, summary};  GET runs?hours=  the last hours' reports (diagnostics)
 //   GET  health            the pipeline's health (routes/health.js), for the GitHub health workflow
 //   POST watchdog          restart or fail stalled Studio jobs (all open jobs), then a fresh health status
-//   POST pages             migration: upsert pages (sources, guidance, theme) from the old config
-//   POST bootstrap         create the first admin when no user exists
+//   POST krea              {who, cap, page, key?, ...} one premium (Krea) image reserved: the month's product-wide cap
+//                          and the page's premium_per_day (UTC day); refused with KREA CAP / KREA PACE
+//   GET  onboard/jobs      the onboarding routine (ONBOARD.md): onboard jobs waiting, or whose session went
+//                          quiet; POST onboard/jobs/<id>/claim | step {step, ok, detail} | result {sources?,
+//                          playbook?, socialpilot_login_id?, deny?} | done | fail {error}
+//   POST bootstrap         create the first user, the product owner (role super), when no user exists
 // Every read of protected content is written to the audit log.
 import { getRecord, putRecord, updateRecord, listRecords, listBlobs, getFile, putImage, appendLog, readLogs } from '../lib/db.js';
 import { put, del } from '../lib/blob.js';
@@ -25,7 +31,9 @@ import { audit, usage } from '../lib/audit.js';
 import { postStatus, faceId, postText, JOB_STALE_MS, failStalled, sentOrSending, isSent, sendingNow, wanted, madeFrom, SENT, checkBack } from './studio.js';
 import { loadDraft } from '../lib/store.js';
 import { routineCaption, routineTags } from '../lib/caption.js';
-import { DOC_TYPES } from './admin.js';
+import { DOC_TYPES, sourceIn } from './admin.js';
+import { statusOf, budgetsOf, limitsOf, onboardingPublic, activeVersion } from '../lib/pages.js';
+import { denyList, isDenied } from '../lib/deny.js';
 import { readReviews, reviewEntry, reviewKey } from '../lib/reviews.js';
 import { saveRun, listRuns, health, watchdog } from './health.js';
 import { approvedSpecs, templatesForJob, saveFromRoutine, markConverted } from './templates.js';
@@ -83,24 +91,30 @@ export default async function handler(req, res) {
 
   if (what === 'config' && req.method === 'GET') {
     const pages = (await listRecords('pages')).filter(p => !p.archived);
+    const ws = Object.fromEntries((await listRecords('workspaces')).map(w => [w.id, w]));
+    const deny = denyList();
     const out = [];
     for (const p of pages) {
       const docs = {};
       for (const t of Object.keys(DOC_TYPES)) {
-        const d = (p.docs || {})[t];
-        const v = d && (d.versions || []).find(x => x.v === d.active);
+        const v = activeVersion(p, t);
         // parts: how many `doc?part=` downloads the PDF takes; size and sha256 check the joined file
         if (v) docs[t] = { version: v.v, filename: v.filename, pages: v.pages, size: v.size, parts: (v.parts || [v.pdf]).length,
                            sha256: v.sha256 || '', chars: v.chars ?? null, text: ((await getFile(v.txt)) || '').toString('utf8') };
       }
-      out.push({ slug: p.slug, name: p.name, fb_page_id: p.fb_page_id, socialpilot_login_id: p.socialpilot_login_id,
-                 timezone: p.timezone, theme: p.theme || {}, posts_per_day: p.posts_per_day || 8,
+      // an account on the deny list is never handed out, whatever the record says
+      const login = p.socialpilot_login_id && !deny.includes(String(p.socialpilot_login_id)) ? p.socialpilot_login_id : '';
+      out.push({ slug: p.slug, name: p.name, workspace: p.workspace || null, status: statusOf(p), fb_page_url: p.fb_page_url || '',
+                 fb_page_id: p.fb_page_id, niche: p.niche || '', language: p.language || '', socialpilot_login_id: login,
+                 ...(p.socialpilot_login_id && !login ? { socialpilot_blocked: true } : {}),
+                 timezone: p.timezone, theme: p.theme || {}, ...budgetsOf(p, ws[p.workspace]), limits: limitsOf(p, ws[p.workspace]),
+                 onboarding: onboardingPublic(p),
                  sources: (p.sources || []).filter(s => s.active !== false), pipeline: p.pipeline || null, playbook: p.playbook || null, docs,
                  // only what an editor approved is ever drawn (`studio sync` writes private/templates/<page>/)
                  templates: approvedSpecs(await getRecord('templates', p.slug)) });
     }
     await audit(ACTOR, 'config_read', { pages: out.map(p => p.slug) });
-    return ok(res, { pages: out });
+    return ok(res, { pages: out, deny });
   }
 
   if (what === 'doc' && req.method === 'GET') {
@@ -127,7 +141,10 @@ export default async function handler(req, res) {
     if (req.method === 'GET') return ok(res, { feed: await getRecord('feed', String(req.query.page || '')) });
     if (req.method === 'POST') {
       const page = clean(b.page, 60);
-      if (!await getRecord('pages', page)) return bad(res, 'no such page', 404);
+      const pg = await getRecord('pages', page);
+      if (!pg) return bad(res, 'no such page', 404);
+      // only a live page (or one making its first posts) has a story feed: a paused one is not worked
+      if (!['live', 'going_live'].includes(statusOf(pg))) return bad(res, `the page is ${statusOf(pg).replace('_', ' ')}: no story feed for it`, 409);
       const stories = (b.stories || []).slice(0, 120).map(s => ({
         id: clean(s.id, 80), headline: clean(s.headline, 400), summary: clean(s.summary, 800),
         sources: (s.sources || []).slice(0, 12).map(x => ({ name: clean(x.name, 80), url: clean(x.url, 600) })),
@@ -379,9 +396,23 @@ export default async function handler(req, res) {
   // keeps the code it started with) never says what was made: its reservations count as made.
   // {who: 'hourly'|'studio', cap, key?, report_only?, made?, confirms?, and from the hourly routine:
   //  hourly_used, hourly_today, month, day (when it counted them)}
+  // Each image is also the page's: a page makes at most its premium_per_day (docs/PRODUCT.md "Budgets")
+  // a UTC day, counted from its reservations (made, or asked less than 45 minutes ago) in the same
+  // write, so two sessions never both take the page's last one. Asked without the page: refused.
   if (what === 'krea' && req.method === 'POST') {
     const cap = Math.max(0, Math.floor(Number(b.cap) || 0)), who = b.who === 'studio' ? 'studio' : 'hourly';
     if (!cap) return bad(res, 'cap missing');
+    const page = clean(b.page, 60);
+    const asking = !b.report_only && !b.made;
+    let pageMax = null;
+    if (asking) {
+      if (!page) return bad(res, 'page missing: say which page the image is for (update the routine)');
+      const pg = await getRecord('pages', page);
+      if (!pg) return bad(res, 'no such page', 404);
+      if (!['live', 'going_live'].includes(statusOf(pg)))
+        return res.status(409).json({ error: `KREA PACE: ${page} is ${statusOf(pg).replace('_', ' ')}, no premium images for it` });
+      pageMax = budgetsOf(pg, pg.workspace && await getRecord('workspaces', pg.workspace)).premium_per_day;
+    }
     // a routine older than this count sends its ledger without the month: refused, it then counts on
     // its own ledger as it did before (a month-less count could be last month's, kept all month)
     if (who === 'hourly' && b.hourly_used !== undefined && b.month === undefined)
@@ -417,7 +448,7 @@ export default async function handler(req, res) {
         }
       }
       const rs = key && b.made && !kept.some(r => r.key === key)        // made after its reservation lapsed
-        ? [...kept, { n: (c.seq || 0) + 1, at: t, who, day, key, made: true }]
+        ? [...kept, { n: (c.seq || 0) + 1, at: t, who, day, key, made: true, ...(page ? { page } : {}) }]
         : kept.map(r => (b.made && r.key === key && !r.made ? { ...r, made: true } : r));
       const counts = kreaCounts(rs, { hU, hT, base: base || 0, baseToday: baseToday[day] || 0, studioBase: c.studio_base || 0 }, onDay, cap, daysLeft);
       const next = { ...c, hourly_used: hU, hourly_today: { [day]: hT }, ...(base !== undefined ? { base, base_today: baseToday } : {}),
@@ -430,19 +461,29 @@ export default async function handler(req, res) {
       // asked again for the same image (a lost answer, a step run twice): it has its reservation
       if (key && rs.some(r => r.key === key)) { out = { ...counts, again: true }; return keep(); }
       const { used, today, allowed } = counts;
+      const pageToday = rs.filter(r => r.page === page && onDay(r)).length;
+      counts.page_today = pageToday; counts.page_allowed = pageMax;
       const no = used >= cap ? `KREA CAP: ${used}/${cap} images this month`
         : today >= allowed ? `KREA PACE: ${today}/${allowed} images today`
+        : pageToday >= pageMax ? `KREA PACE: ${pageToday}/${pageMax} images today for ${page}`
         // until the hourly routine has counted this month (its next run reports at prepare), Studio
         // would be checked against its own images only
         : !next.reported && who === 'studio' ? 'KREA UNCHECKED: the hourly routine has not counted this month\'s images yet' : '';
       if (no) { out = { error: no, ...counts }; return keep(); }
-      out = { ...counts, used: used + 1, today: today + 1,
+      out = { ...counts, used: used + 1, today: today + 1, page_today: pageToday + 1,
               ...(who === 'studio' ? { studio: counts.studio + 1, studio_today: counts.studio_today + 1 } : {}) };
       const n = next.seq + 1;
-      return { ...next, seq: n, res: [...rs, { n, at: t, who, day, ...(key ? { key } : {}), ...(who === 'studio' && !b.confirms ? { made: true } : {}) }] };
+      return { ...next, seq: n, res: [...rs, { n, at: t, who, day, page, ...(key ? { key } : {}), ...(who === 'studio' && !b.confirms ? { made: true } : {}) }] };
     });
     return out.error ? res.status(409).json(out) : ok(res, out);
   }
+
+  // ---------------------------------------------------------------- onboarding (ONBOARD.md)
+  // An owner pressed Go live (routes/pages.js): the page is `going_live` with an onboard job. The
+  // routine claims it (one session per job: a claim is a file only one session can create), reports
+  // each step, sends what it found (the SocialPilot account, sources, the playbook), and ends it: done
+  // makes the page live, fail says why (the owner reads it, and presses Try again).
+  if (what === 'onboard') return onboard(req, res, b);
 
   if (what === 'templates' && req.method === 'POST') {
     try { return ok(res, await saveFromRoutine(b)); } catch (e) { if (e.status) return bad(res, e.message, e.status); throw e; }
@@ -454,22 +495,6 @@ export default async function handler(req, res) {
       units: Number(e.units) || 0, unit: clean(e.unit, 30), cost_usd: Number(e.cost_usd) || 0, detail: clean(e.detail, 300),
       when: Number(e.when) || Date.now() });
     return ok(res, { logged: entries.length });
-  }
-
-  if (what === 'pages' && req.method === 'POST') {                   // one-time migration from the old config
-    const done = [];
-    for (const p of (b.pages || [])) {
-      const slug = clean(p.slug, 60);
-      if (!slug) continue;
-      const cur = (await getRecord('pages', slug)) || { slug, docs: {}, created_at: Date.now() };
-      await putRecord('pages', slug, { ...cur, name: clean(p.name, 100) || cur.name, fb_page_id: clean(p.fb_page_id, 60) || cur.fb_page_id || '',
-        socialpilot_login_id: clean(p.socialpilot_login_id, 30) || cur.socialpilot_login_id || '', timezone: p.timezone || cur.timezone || 'America/New_York',
-        theme: { ...(cur.theme || {}), ...(p.theme || {}) }, posts_per_day: Number(p.posts_per_day) || cur.posts_per_day || 8,
-        sources: p.sources || cur.sources || [], pipeline: p.pipeline !== undefined ? p.pipeline : cur.pipeline || null, playbook: p.playbook !== undefined ? p.playbook : cur.playbook || null, archived: false });
-      done.push(slug);
-    }
-    await audit(ACTOR, 'pages_imported', { pages: done });
-    return ok(res, { pages: done });
   }
 
   // run log: routines report each step and any error, so a run that dies early is visible
@@ -546,12 +571,167 @@ export default async function handler(req, res) {
   if (what === 'bootstrap' && req.method === 'POST') {
     if ((await allUsers()).length) return bad(res, 'users already exist', 409);
     const email = clean(b.email, 200).toLowerCase();
-    const u = { id: userId(email), email, name: clean(b.name, 100), role: 'admin', pages: [], active: true, must_change: true,
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return bad(res, 'enter a valid email');
+    // the first user is the product owner: every workspace (docs/PRODUCT.md "Roles")
+    const u = { id: userId(email), email, name: clean(b.name, 100), role: 'super', workspace: null, pages: [], active: true, must_change: true,
                 created_at: Date.now(), pw: hashPassword(crypto.randomUUID()) };
     await putRecord('users', u.id, u);
     const link = await issueReset(u, siteOrigin(req));
-    await audit(ACTOR, 'bootstrap_admin', { target: email });
+    await audit(ACTOR, 'bootstrap_super', { target: email });
     return ok(res, { setup_link: link });
   }
   return bad(res, 'not found', 404);
+}
+
+// ------------------------------------------------------------------ onboarding
+const ONBOARD_STALE_MS = 30 * 60e3;          // a claimed job with no report for this long: its session died
+const STEP = /^[a-z][a-z0-9_]{1,39}$/;
+const LOGIN = /^\d{1,15}$/;
+const onboardOpen = (j, now = Date.now()) => j.status === 'queued' || (j.status === 'running' && now - (j.active_at || j.started_at || 0) > ONBOARD_STALE_MS);
+const loginPath = id => `sp-logins/${id}.json`;
+
+// what the routine is given about the page it onboards (never another page's)
+function onboardPageOut(p, ws) {
+  const docs = {};
+  for (const t of Object.keys(DOC_TYPES)) { const v = activeVersion(p, t); if (v) docs[t] = { version: v.v, filename: v.filename, pages: v.pages || 0 }; }
+  return { slug: p.slug, name: p.name, workspace: p.workspace || null, status: statusOf(p), fb_page_url: p.fb_page_url || '', niche: p.niche || '',
+           language: p.language || '', timezone: p.timezone || '', ...budgetsOf(p, ws), docs, sources: p.sources || [], playbook: p.playbook || null,
+           socialpilot_login_id: p.socialpilot_login_id || '' };
+}
+
+// The page's SocialPilot account: one account per page, product-wide. Taken with a file only one page
+// can create (two pages onboarding at once cannot both take it); the page's earlier one is let go.
+async function takeLogin(page, id, was) {
+  try {
+    await put(loginPath(id), JSON.stringify({ page, at: Date.now() }), { access: 'public', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: false });
+  } catch (e) {
+    const [x] = (await listBlobs(loginPath(id))).filter(f => f.pathname === loginPath(id));
+    if (!x) throw e;
+    const { getJson } = await import('../lib/store.js');
+    const c = await getJson(x.url).catch(() => null);
+    if (!c || c.page !== page) return false;
+  }
+  if (was && was !== id) {
+    const old = (await listBlobs(loginPath(was))).filter(f => f.pathname === loginPath(was));
+    if (old.length) await del(old.map(f => f.url)).catch(() => {});
+  }
+  return true;
+}
+
+async function onboard(req, res, b) {
+  const [, sub, id, act] = req.subpath;
+  if (sub !== 'jobs') return bad(res, 'not found', 404);
+  if (req.method === 'GET' && !id) {
+    const now = Date.now();
+    const jobs = (await listRecords('onboard')).filter(j => onboardOpen(j, now)).sort((a, c) => a.created_at - c.created_at);
+    const pages = await listRecords('pages');
+    const ws = Object.fromEntries((await listRecords('workspaces')).map(w => [w.id, w]));
+    const out = [];
+    for (const j of jobs) {
+      const p = pages.find(x => x.slug === j.page);
+      if (!p || statusOf(p) !== 'going_live' || (p.onboarding || {}).job !== j.id) continue;   // paused, or Go live pressed again since
+      out.push({ ...j, stale: j.status === 'running', page: onboardPageOut(p, ws[p.workspace]) });
+    }
+    // the accounts other pages use: never one of these for this page (nor one on the deny list)
+    const used = pages.filter(p => p.socialpilot_login_id).map(p => ({ page: p.slug, socialpilot_login_id: String(p.socialpilot_login_id) }));
+    return ok(res, { jobs: out, used, deny: denyList(b.deny) });
+  }
+  const job = id && await getRecord('onboard', clean(id, 120));
+  if (!job) return bad(res, 'no such onboard job', 404);
+  if (req.method !== 'POST') return bad(res, 'not found', 404);
+  const page = await getRecord('pages', job.page);
+  const current = !!page && statusOf(page) === 'going_live' && (page.onboarding || {}).job === job.id;
+
+  if (act === 'claim') {
+    if (!current) return res.status(409).json({ error: `the page is no longer going live with this job (${page ? statusOf(page) : 'deleted'}): leave it` });
+    if (!onboardOpen(job)) return res.status(409).json({ error: `already ${job.status}: another session has it` });
+    const claims = (await listBlobs(`onboard-claims/${job.id}/`)).sort((x, y) => new Date(y.uploadedAt) - new Date(x.uploadedAt));
+    if (claims.length && Date.now() - new Date(claims[0].uploadedAt) < ONBOARD_STALE_MS && job.status === 'running')
+      return res.status(409).json({ error: 'claimed by another session' });
+    try {
+      await put(`onboard-claims/${job.id}/${claims.length}.json`, JSON.stringify({ at: Date.now(), session: clean(b.session, 40) }),
+                { access: 'public', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: false });
+    } catch (e) {
+      return res.status(409).json({ error: 'claimed by another session' });
+    }
+    const now = Date.now();
+    const saved = await updateRecord('onboard', job.id, cur => cur && { ...cur, status: 'running', started_at: now, active_at: now, claims: (cur.claims || 0) + 1 });
+    await audit(ACTOR, 'onboard_claimed', { page: job.page, job: job.id });
+    return ok(res, { job: saved, page: onboardPageOut(page, page.workspace && await getRecord('workspaces', page.workspace)) });
+  }
+
+  if (!['step', 'result', 'done', 'fail'].includes(act)) return bad(res, 'not found', 404);
+  if (job.status !== 'running') return res.status(409).json({ error: `this job is ${job.status}: claim it first` });
+  if (!current) return res.status(409).json({ error: `the page is no longer going live with this job (${page ? statusOf(page) : 'deleted'}): stop` });
+  const touch = extra => updateRecord('onboard', job.id, cur => cur && { ...cur, active_at: Date.now(), ...extra });
+  // a change to the page, made on its newest copy only while it is still going live with this job
+  const onPage = async change => {
+    let gone = false;
+    const rec = await updateRecord('pages', job.page, cur => {
+      gone = !cur || statusOf(cur) !== 'going_live' || (cur.onboarding || {}).job !== job.id;
+      return gone ? null : change(cur);
+    });
+    return gone ? null : rec;
+  };
+  const stopped = () => res.status(409).json({ error: 'the page is no longer going live with this job: stop' });
+
+  if (act === 'step') {
+    const step = clean(b.step, 40);
+    if (!STEP.test(step)) return bad(res, 'step: a name like link_account (lower-case letters, digits, _)');
+    const entry = { step, ok: b.ok !== false, detail: clean(b.detail, 600), at: Date.now() };
+    const rec = await onPage(cur => ({ ...cur, onboarding: { ...(cur.onboarding || {}), steps: [...((cur.onboarding || {}).steps || []), entry].slice(-60) } }));
+    if (!rec) return stopped();
+    await touch({});
+    return ok(res, { step: entry });
+  }
+
+  if (act === 'result') {
+    const set = {};
+    if (b.socialpilot_login_id !== undefined) {
+      const login = clean(b.socialpilot_login_id, 30);
+      if (!LOGIN.test(login)) return bad(res, 'the SocialPilot account is its loginId: a number, from SocialPilot\'s account list');
+      if (isDenied(login, b.deny)) return res.status(409).json({ error: 'that SocialPilot account is on the deny list: it is never used' });
+      const others = (await listRecords('pages')).filter(p => p.slug !== job.page && String(p.socialpilot_login_id || '') === login);
+      if (others.length || !await takeLogin(job.page, login, page.socialpilot_login_id))
+        return res.status(409).json({ error: 'that SocialPilot account is linked to another page already: find this page\'s own account' });
+      set.socialpilot_login_id = login;
+    }
+    if (b.sources !== undefined) {
+      if (!Array.isArray(b.sources)) return bad(res, 'sources: a list of {type, url, label}');
+      const sources = [];
+      for (const x of b.sources.slice(0, 200)) { const r = sourceIn(x); if (r.error) return bad(res, `source ${sources.length + 1}: ${r.error}`); sources.push({ ...r.src, by: 'onboarding' }); }
+      set.sources = sources;
+    }
+    if (b.playbook !== undefined) {
+      if (b.playbook === null || !['object', 'string'].includes(typeof b.playbook)) return bad(res, 'playbook: the playbook (an object or a text)');
+      if (JSON.stringify(b.playbook).length > 60000) return bad(res, 'the playbook is too large', 413);
+      set.playbook = b.playbook;
+    }
+    if (!Object.keys(set).length) return bad(res, 'send sources, playbook or socialpilot_login_id');
+    const rec = await onPage(cur => ({ ...cur, ...set }));
+    if (!rec) return stopped();
+    await touch({});
+    await audit(ACTOR, 'onboard_result', { page: job.page, job: job.id, fields: Object.keys(set), ...(set.sources ? { sources: set.sources.length } : {}) });
+    return ok(res, { saved: Object.keys(set) });
+  }
+
+  if (act === 'done') {
+    // a page goes live only with its own account linked, and never one on the deny list
+    if (!page.socialpilot_login_id) return res.status(409).json({ error: 'link the page\'s SocialPilot account first (onboard result socialpilot_login_id)' });
+    if (isDenied(page.socialpilot_login_id, b.deny)) return res.status(409).json({ error: 'the page\'s SocialPilot account is on the deny list: link its own account' });
+    const rec = await onPage(cur => ({ ...cur, status: 'live', live_at: Date.now(), onboarding: { ...(cur.onboarding || {}), error: '', done_at: Date.now() } }));
+    if (!rec) return stopped();
+    await touch({ status: 'done', done_at: Date.now() });
+    await audit(ACTOR, 'page_live', { page: job.page, workspace: page.workspace, job: job.id });
+    return ok(res, { status: 'live' });
+  }
+
+  // fail {error}: the reason, in words the owner can act on (they read it, then press Try again)
+  const error = clean(b.error, 600);
+  if (!error) return bad(res, 'say what went wrong and what the owner can do (error)');
+  const rec = await onPage(cur => ({ ...cur, status: 'failed', onboarding: { ...(cur.onboarding || {}), error, failed_at: Date.now() } }));
+  if (!rec) return stopped();
+  await touch({ status: 'failed', error, done_at: Date.now() });
+  await audit(ACTOR, 'page_onboarding_failed', { page: job.page, workspace: page.workspace, job: job.id });
+  return ok(res, { status: 'failed' });
 }

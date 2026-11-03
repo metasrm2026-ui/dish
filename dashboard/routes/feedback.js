@@ -8,7 +8,8 @@ import { isRoutine, isReviewer, deny } from '../lib/auth.js';
 import { listAll, groupDrafts, loadDraft, setStatus, saveReference, claimDecision, decidedBy, releaseDecision } from '../lib/store.js';
 import { recordReview } from '../lib/reviews.js';
 import { mapLimit, READ_CONCURRENCY, errorStatus } from '../lib/db.js';
-import { resentAs, already, mine, NOT_YOURS } from './decide.js';
+import { resentAs, already, notYours } from './decide.js';
+import { pageScope } from '../lib/tenancy.js';
 
 const OPEN = ['pending', 'failed', 'rejected'];
 
@@ -39,7 +40,8 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, status: 'pending' });
     }
     if (!isReviewer(req)) return deny(res);
-    if (!mine(req, draft)) return res.status(403).json({ error: NOT_YOURS });
+    await pageScope(req);
+    if (await notYours(req, res, draft)) return;
     const text = String(feedback || '').trim();
     if (!text && !image_b64) return res.status(400).json({ error: 'write feedback or attach an image' });
     if (!OPEN.includes(draft.status)) return res.status(409).json({ error: already(draft.status) });

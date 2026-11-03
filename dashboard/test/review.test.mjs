@@ -3,7 +3,7 @@
 // redos and links, needs-a-person notes marked done.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { client } from './helpers.mjs';
+import { client, adminPage } from './helpers.mjs';
 
 const R = { routine: true };
 const tinyJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=', 'base64');
@@ -28,8 +28,8 @@ const status = async id => (await robot.call('GET', '/api/drafts?status=all', un
 test.before(async () => {
   const boot = await robot.call('POST', '/api/routine/bootstrap', { email: 'owner@example.com', name: 'Owner' }, R);
   await signIn(owner, boot.body.setup_link, 'owner@example.com', 'correct horse 42');
-  await owner.call('POST', '/api/admin/pages', { name: 'Dummy Sports', fb_page_id: '123', socialpilot_login_id: '999' });
-  const inv = await owner.call('POST', '/api/admin/users', { email: 'ed@example.com', role: 'editor', pages: ['dummy-sports'] });
+  await adminPage(owner, 'Dummy Sports', '999', { fb_page_id: '123' });
+  const inv = await owner.call('POST', '/api/admin/users', { email: 'ed@example.com', role: 'editor', workspace: owner.ws, pages: ['dummy-sports'] });
   await signIn(editor, inv.body.setup_link, 'ed@example.com', 'editor pass 77');
 });
 

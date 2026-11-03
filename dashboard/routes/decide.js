@@ -11,10 +11,30 @@ import { put, list, del } from '../lib/blob.js';
 import { getRecord, errorStatus } from '../lib/db.js';
 import { setNeedsAction, needsAction } from './result.js';
 import { health } from './health.js';
+import { isSuper, pageScope } from '../lib/tenancy.js';
+import { notPublishable } from '../lib/pages.js';
 
-// an editor decides only the posts of their own pages (admins: every page), as in the Studio
-export const mine = (req, d) => req.user.role === 'admin' || (req.user.pages || []).includes(d.page);
+// a person decides only the posts of the pages they may use (lib/tenancy.js), as in the Studio. The
+// request's scope is read first (pageScope): a check without it is a mistake, never "every page".
+export const mine = (req, d) => {
+  if (!req.user || isSuper(req.user)) return true;
+  if (!req._scope) throw new Error('the pages this person may use were not read');
+  return req._scope.has(d.page);
+};
 export const NOT_YOURS = 'this post is for a page you no longer have: reload the page';
+// A post of a page this person may not use: one of their own workspace's pages they were not given
+// says so; another workspace's is no post at all (its id says nothing).
+export async function notYours(req, res, d) {
+  if (mine(req, d)) return false;
+  const p = await getRecord('pages', d.page).catch(() => null);
+  if (p && req.user.workspace && p.workspace === req.user.workspace) res.status(403).json({ error: NOT_YOURS });
+  else res.status(404).json({ error: 'no such draft' });
+  return true;
+}
+// an approval goes to the publisher: only for a live page with its own SocialPilot account
+async function unpublishable(page) {
+  return notPublishable(await getRecord('pages', page));
+}
 
 // Why a failed post must not simply be approved again: an original whose update went out instead
 // would go out after it, and so would a Studio post's draft once the editor sent the post again
@@ -86,7 +106,7 @@ async function retryMany(req, res, ids) {
   for (const id of ids.slice(0, 40)) {
     const draft = await loadDraft(String(id));
     if (!draft || draft.status !== 'failed' || !mine(req, draft)) continue;
-    const why = await retryRefused(draft, req.body.confirmed === true, notes[draft.id]);
+    const why = await unpublishable(draft.page) || await retryRefused(draft, req.body.confirmed === true, notes[draft.id]);
     if (why) { refused.push({ id: draft.id, why }); continue; }
     const taken = await claimDecision(draft.id, draft.statusBody.at, req.user.email, 'retry');
     if (taken) { refused.push({ id: draft.id, why: decidedBy(taken) }); continue; }
@@ -123,7 +143,7 @@ export const already = status => ALREADY[status] || 'Someone else changed this p
 async function withdraw(req, res, id) {
   const d = await loadDraft(String(id || ''));
   if (!d) return res.status(404).json({ error: 'no such draft' });
-  if (!mine(req, d)) return res.status(403).json({ error: NOT_YOURS });
+  if (await notYours(req, res, d)) return;
   if (d.status !== 'approved') return res.status(409).json({ error: already(d.status) });
   if (!await takeBack(d, 'Withdrawn', req.user.email))
     return res.status(409).json({ error: 'being scheduled in SocialPilot right now: too late to withdraw here' });
@@ -135,12 +155,13 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   if (!isReviewer(req)) return deny(res);
   try {
+    await pageScope(req);
     const { id, ids, decision, caption, reason, note } = req.body || {};
     if (decision === 'withdraw') return await withdraw(req, res, id);
     if (decision === 'done') {                       // a needs-action note was dealt with
       const d = await loadDraft(String(id || ''));
       if (!d) return res.status(404).json({ error: 'no such draft' });
-      if (!mine(req, d)) return res.status(403).json({ error: NOT_YOURS });
+      if (await notYours(req, res, d)) return;
       const act = (await needsAction({ strict: true }))[d.id];
       // the outdated original is gone from SocialPilot: it is not scheduled any more, nor looked for
       if (act && act.kind === 'superseded_original' && d.status === 'scheduled')
@@ -171,12 +192,14 @@ export default async function handler(req, res) {
     }
     const draft = await loadDraft(id);
     if (!draft) return res.status(404).json({ error: 'no such draft' });
-    if (!mine(req, draft)) return res.status(403).json({ error: NOT_YOURS });
+    if (await notYours(req, res, draft)) return;
     if (draft.status !== 'pending' && draft.status !== 'failed') return res.status(409).json({ error: already(draft.status) });
     if (decision !== 'reject' && decision !== 'approve') return res.status(400).json({ error: 'decision must be approve or reject' });
     // an emptied caption is refused, never swapped for the routine's (callers that send none get it)
     if (decision === 'approve' && typeof caption === 'string' && !written(caption))
       return res.status(400).json({ error: 'the caption is empty: write one first' });
+    const closed = decision === 'approve' && await unpublishable(draft.page);
+    if (closed) return res.status(409).json({ error: `not approved: ${closed}` });
     const refused = decision === 'approve' && draft.status === 'failed' && await retryRefused(draft, req.body.confirmed === true, (await needsAction({ strict: true }))[draft.id]);
     if (refused) return res.status(409).json({ error: `not approved again: ${refused}` });
     const taken = await claimDecision(draft.id, draft.statusBody.at, req.user.email, decision);

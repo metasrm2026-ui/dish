@@ -3,8 +3,14 @@
 //   Session: HttpOnly cookie signed with SESSION_SECRET, expiring after SESSION_IDLE_MINUTES
 //   without activity (default 120) and after 12 hours in any case.
 //   Failed logins: 5 in a row lock the account for 15 minutes.
+//   OPEN_ACCESS=1 (the owner's choice for now: "nothing to sign up, no password: click the link and
+//   view"): a request without a session is the product owner "Owner" (openUser). docs/DASHBOARD_API.md, "Open access".
 import crypto from 'node:crypto';
 import { getRecord, updateRecord, listRecords } from './db.js';
+import { roleOf, mayUse } from './tenancy.js';
+import { isRoutine } from './auth.js';
+import { audit } from './audit.js';
+import { setting } from './defaults.js';
 
 const IDLE_MIN = Number(process.env.SESSION_IDLE_MINUTES || 120);
 const MAX_AGE_H = 12;
@@ -55,15 +61,22 @@ function readCookie(req) {
 }
 
 export function publicUser(u) {
-  return u && { id: u.id, email: u.email, name: u.name || '', role: u.role, pages: u.pages || [], active: u.active !== false,
-                must_change: !!u.must_change };
+  return u && { id: u.id, email: u.email, name: u.name || '', role: roleOf(u), workspace: u.workspace || null, pages: u.pages || [],
+                active: u.active !== false, must_change: !!u.must_change, ...(u.open_access ? { open_access: true } : {}) };
 }
 
-// The signed-in user, or null. Refreshes the idle timer (sets a new cookie on `res`).
+// The signed-in user, or null. Refreshes the idle timer (sets a new cookie on `res`). With open
+// access, a request without a (valid) session is the open-access owner instead.
 export async function currentUser(req, res) {
   if (req._user !== undefined) return req._user;
-  const c = readCookie(req);
   req._user = null;
+  const u = await sessionUser(req, res) || (openAccess() && !isRoutine(req) ? await openUser() : null);
+  req._user = u || null;
+  return req._user;
+}
+
+async function sessionUser(req, res) {
+  const c = readCookie(req);
   if (!c) return null;
   const now = Date.now();
   if (now - c.last > IDLE_MIN * 60e3 || now - c.iat > MAX_AGE_H * 3600e3) return null;
@@ -71,8 +84,33 @@ export async function currentUser(req, res) {
   if (!u || u.active === false) return null;
   if (u.sessions_after && c.iat < u.sessions_after) return null;   // signed out everywhere / password changed
   if (res && now - c.last > 60e3) res.setHeader('Set-Cookie', cookieFor(u.id, c.iat));
-  req._user = u;
   return u;
+}
+
+// Open access: on while OPEN_ACCESS is "1" (lib/defaults.js sets it for this deployment; the owner turns
+// it off with OPEN_ACCESS=0 in the hosting provider's settings). The open-access owner is a super user named Owner with a
+// workspace of its own, made on first use: workspaces, roles and every safety rule apply to it as to
+// anyone. Signing in still works (a tester's session is the tester's), a routine's request is never a
+// person's (it carries ROUTINE_SECRET), and a deactivated Owner opens nothing.
+export const openAccess = () => String(setting('OPEN_ACCESS')).trim() === '1';
+export const OPEN_EMAIL = () => String(process.env.OPEN_ACCESS_EMAIL || 'owner@studio.invalid').trim().toLowerCase();
+export const OPEN_WORKSPACE = 'studio-owner';                // never a tester's (routes/admin.js freeWorkspaceId)
+
+export async function openUser() {
+  const email = OPEN_EMAIL(), id = userId(email);
+  const have = await getRecord('users', id);
+  if (have) return have.active === false ? null : have;
+  await updateRecord('workspaces', OPEN_WORKSPACE, cur => (cur ? null : { id: OPEN_WORKSPACE, name: 'Owner', limits: {}, owner_id: id,
+                                                                          owner_email: email, created_at: Date.now(), created_by: 'open access' }));
+  // on the newest copy: two first requests at once make one Owner
+  let made = false;
+  const u = await updateRecord('users', id, cur => {
+    made = !cur;
+    return cur ? null : { id, email, name: 'Owner', role: 'super', workspace: OPEN_WORKSPACE, pages: [], active: true, must_change: false,
+                          open_access: true, created_at: Date.now(), pw: hashPassword(crypto.randomBytes(24).toString('base64')) };
+  });
+  if (made) await audit('open access', 'open_owner_created', { target: email, workspace: OPEN_WORKSPACE });
+  return u.active === false ? null : u;
 }
 
 export async function login(email, password, res) {
@@ -104,8 +142,10 @@ export async function login(email, password, res) {
   return { user: u };
 }
 
-export async function canUsePage(u, slug) {
-  return !!u && (u.role === 'admin' || (u.pages || []).includes(slug));
+// page: its record when the caller has read it already
+export async function canUsePage(u, slug, page) {
+  if (!u || !slug) return false;
+  return mayUse(u, page && page.slug === slug ? page : await getRecord('pages', slug));
 }
 
 export async function allUsers() {

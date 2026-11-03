@@ -3,7 +3,7 @@
 // withdraw or hold whose status write failed, and bulk actions on posts decided meanwhile.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { client } from './helpers.mjs';
+import { client, makeLive, workspace } from './helpers.mjs';
 
 const R = { routine: true };
 const tinyJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=', 'base64');
@@ -14,7 +14,7 @@ const { resetReads } = await import('../lib/db.js');
 const mem = globalThis.__boreBlobs;
 const stamp = (t = Date.now()) => new Date(t).toISOString().replace(/\D/g, '').slice(0, 12);
 const robot = client(), owner = client(), editor = client();
-let hoops, other;
+let top20, other;
 
 async function signIn(c, link, email, pw) {
   await c.call('POST', '/api/auth/reset', { token: link.split('#reset=')[1], password: pw });
@@ -42,23 +42,25 @@ function refuse(match, { lost = false, always = false } = {}) {
 test.before(async () => {
   const boot = await robot.call('POST', '/api/routine/bootstrap', { email: 'owner@example.com', name: 'Owner' }, R);
   await signIn(owner, boot.body.setup_link, 'owner@example.com', 'correct horse 42');
-  await owner.call('POST', '/api/admin/pages', { name: 'Dummy Sports', fb_page_id: '123', socialpilot_login_id: '999' });
-  hoops = (await owner.call('POST', '/api/admin/pages', { name: 'Top 25 Hoops', fb_page_id: '124', socialpilot_login_id: '998' })).body.page.slug;
-  other = (await owner.call('POST', '/api/admin/pages', { name: 'Other Page', fb_page_id: '125', socialpilot_login_id: '997' })).body.page.slug;
-  const inv = await owner.call('POST', '/api/admin/users', { email: 'ed@example.com', role: 'editor', pages: ['dummy-sports', hoops] });
+  const WS = (await workspace(owner)).id;
+  await owner.call('POST', '/api/admin/pages', { name: 'Dummy Sports', fb_page_id: '123', workspace: WS });
+  top20 = (await owner.call('POST', '/api/admin/pages', { name: 'Top 20 Demo', fb_page_id: '124', workspace: WS })).body.page.slug;
+  other = (await owner.call('POST', '/api/admin/pages', { name: 'Other Page', fb_page_id: '125', workspace: WS })).body.page.slug;
+  for (const [slug, login] of [['dummy-sports', '999'], [top20, '998'], [other, '997']]) await makeLive(slug, login);
+  const inv = await owner.call('POST', '/api/admin/users', { email: 'ed@example.com', role: 'editor', workspace: WS, pages: ['dummy-sports', top20] });
   await signIn(editor, inv.body.setup_link, 'ed@example.com', 'editor pass 77');
 });
 
-test("a page whose slug holds '-2' (Top 25 Hoops) gets its posts in Waiting and its own counts", async () => {
-  assert.equal(hoops, 'top-25-hoops');
-  assert.equal(pageOf('top-25-hoops-202610211200-hoops-story'), 'top-25-hoops');
+test("a page whose slug holds '-2' (Top 20 Demo) gets its posts in Waiting and its own counts", async () => {
+  assert.equal(top20, 'top-20-demo');
+  assert.equal(pageOf('top-20-demo-202610211200-demo-story'), 'top-20-demo');
   assert.equal(pageOf('dummy-sports-202610211200-x-2-1'), 'dummy-sports');
-  const id = await draft('hoops-story', 'pending', {}, hoops);
+  const id = await draft('demo-story', 'pending', {}, top20);
   assert.ok((await editor.call('GET', '/api/drafts?status=pending')).body.drafts.some(d => d.id === id), 'the editor sees it');
   const s = (await robot.call('GET', '/api/stats?since=0', undefined, R)).body;
-  assert.equal((s.counts[hoops] || {}).pending, 1);
+  assert.equal((s.counts[top20] || {}).pending, 1);
   assert.equal(s.counts.top, undefined);
-  assert.equal((await robot.call('GET', `/api/stats?since=0&page=${hoops}`, undefined, R)).body.counts[hoops].pending, 1, 'the daily cap counts it');
+  assert.equal((await robot.call('GET', `/api/stats?since=0&page=${top20}`, undefined, R)).body.counts[top20].pending, 1, 'the daily cap counts it');
 });
 
 test("an editor sees only their own pages' notes, counts and links, and cannot retry another page's link", async () => {
@@ -113,7 +115,7 @@ test("an editor's health reason carries only their own posts' ids and level, how
 });
 
 test("a note stored before the '-2' fix, with the wrong page, still reaches its page's editor", async () => {
-  const id = await draft('old-note', 'scheduled', {}, hoops);
+  const id = await draft('old-note', 'scheduled', {}, top20);
   await setNeedsAction(id, 'top', 'delete the second copy in SocialPilot');     // what groupDrafts' old split('-2') gave
   assert.ok(id in (await editor.call('GET', '/api/stats?since=0')).body.publisher.needs_action);
   assert.equal((await editor.call('POST', '/api/decide', { id, decision: 'done' })).status, 200);

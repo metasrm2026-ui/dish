@@ -10,15 +10,14 @@ import { isRoutine, isReviewer, deny } from '../lib/auth.js';
 import { listAll, getJson } from '../lib/store.js';
 import { errorStatus, getRecord } from '../lib/db.js';
 import { canUsePage } from '../lib/session.js';
+import { pageScope, inScope } from '../lib/tenancy.js';
+import { statusOf } from '../lib/pages.js';
 
-// the page's name as set in Admin > Pages, when the user may post for it (and it is not archived)
-async function pageName(user, slug) {
-  const p = slug && typeof slug === 'string' && await canUsePage(user, slug) && await getRecord('pages', slug);
-  return p && !p.archived ? p.name || slug : '';
+// the page's record, when the user may post for it (and it is not archived)
+async function pageFor(user, slug) {
+  const p = slug && typeof slug === 'string' && await getRecord('pages', slug);
+  return p && !p.archived && await canUsePage(user, slug, p) ? p : null;
 }
-
-// an editor sees and retries only the links of their own pages (admins and the routine: every page)
-const theirs = (req, l) => !req.user || req.user.role === 'admin' || (req.user.pages || []).includes(l.page);
 
 export async function setLinkStatus(id, status, body = {}) {
   const at = Date.now();
@@ -50,6 +49,10 @@ export async function listLinks() {
 
 export default async function handler(req, res) {
   try {
+    // a person sees and retries only the links of the pages they may use (lib/tenancy.js); the product
+    // owner and the routine every page
+    const scope = await pageScope(req);
+    const theirs = (r, l) => inScope(scope, l.page);
     if (req.method === 'GET') {
       if (!isReviewer(req) && !isRoutine(req)) return deny(res);
       const want = String(req.query.status || 'all');
@@ -73,8 +76,11 @@ export default async function handler(req, res) {
     let u;
     try { u = new URL(String(url || '').trim()); } catch { return res.status(400).json({ error: 'paste a full link starting with https://' }); }
     if (!/^https?:$/.test(u.protocol)) return res.status(400).json({ error: 'paste a full link starting with https://' });
-    const name = await pageName(req.user, page);
-    if (!name) return res.status(400).json({ error: 'choose the page' });
+    const pg = await pageFor(req.user, page);
+    if (!pg) return res.status(400).json({ error: 'choose the page' });
+    // a paused page makes no posts (no hourly runs) until it is resumed
+    if (!['live', 'going_live'].includes(statusOf(pg))) return res.status(409).json({ error: `the page is ${statusOf(pg).replace('_', ' ')}: links are taken once it is live` });
+    const name = pg.name || page;
     const recent = (await listLinks()).filter(l => l.url === u.href && l.page === page && l.status !== 'failed'
       && Date.now() - l.at < 4 * 86400e3);
     if (recent.length) return res.status(409).json({ error: `already requested for ${name} (${recent[0].status})` });

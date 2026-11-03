@@ -1,5 +1,5 @@
 {
-  "functions": { "api/main.js": { "maxDuration": 60 } },
+  "functions": { "api/main.js": { "maxDuration": 60, "includeFiles": "config/socialpilot.yaml" } },
   "rewrites": [{ "source": "/api/:path*", "destination": "/api/main?route=:path*" }],
   "headers": [{ "source": "/(index.html|review.html|app.js|app.css|version.json)?", "headers": [
     { "key": "Cache-Control", "value": "no-cache" } ] },

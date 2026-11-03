@@ -14,7 +14,7 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 API_LEVEL=3                       # raise it when the Python starts depending on a new endpoint
 VERCEL=vercel@65.0.0              # pinned, bumped on purpose: a newer CLI once stopped moving the alias
-host="${DASHBOARD_ALIAS:-bore-dashboard.vercel.app}"
+host="${DASHBOARD_ALIAS:?set DASHBOARD_ALIAS to the address of this product dashboard, like studio.example.com}"
 cd "$here"
 if [ -n "$(git status --porcelain -- .)" ]; then
   echo "deploy: dashboard/ has uncommitted changes; commit them first (only a commit is deployed):" >&2
@@ -28,6 +28,10 @@ npm test
 tmp="$(mktemp -d)"
 git -C "$(git rev-parse --show-toplevel)" archive --format=tar HEAD:dashboard \
   api lib routes public package.json package-lock.json vercel.json | tar -x -C "$tmp"
+# the SocialPilot deny list goes with it: the dashboard refuses those accounts itself (lib/deny.js)
+mkdir -p "$tmp/config"
+git -C "$(git rev-parse --show-toplevel)" show HEAD:config/socialpilot.yaml > "$tmp/config/socialpilot.yaml" 2>/dev/null \
+  || echo "deploy: config/socialpilot.yaml is missing: the dashboard refuses only the accounts in SOCIALPILOT_BLOCKED_IDS" >&2
 cp -r .vercel "$tmp"/
 printf '{"commit":"%s","api":%s}\n' "$commit" "$API_LEVEL" > "$tmp/public/version.json"
 cd "$tmp"

@@ -100,7 +100,7 @@ async function accessLost() {
 function accessTaken(before) {
   if (!before || !S.me) return '';
   const gone = before.pages.filter(p => !S.pages.some(x => x.slug === p.slug)).map(p => p.name);
-  return before.user.role === 'admin' && S.me.user.role !== 'admin' ? 'You are no longer an admin: ask an admin if you still need it'
+  return before.user.role === 'super' && S.me.user.role !== 'super' ? 'You are no longer an admin: ask an admin if you still need it'
     : gone.length ? `You no longer have access to ${gone.join(', ')}: ask an admin if you still need it` : '';
 }
 
@@ -127,7 +127,7 @@ function header() {
   const u = S.me && S.me.user;
   if (!u) { $('#top').innerHTML = `<div class="bar"><span class="brand">Post Studio</span></div>`; return; }
   const h = location.hash;
-  const nav = [['#/studio', 'Studio'], ['/review.html', 'Hourly approvals'], ['#/templates', 'Templates'], ...(u.role === 'admin' ? [['#/admin/users', 'Admin']] : [])];
+  const nav = [['#/studio', 'Studio'], ['/review.html', 'Hourly approvals'], ['#/templates', 'Templates'], ...(u.role === 'super' ? [['#/admin/users', 'Admin']] : [])];
   $('#top').innerHTML = `<div class="bar"><span class="brand">Post Studio</span>
     <nav class="nav">${nav.map(([href, l]) => `<a href="${href}" class="${h.startsWith(href) || (href === '#/studio' && h.startsWith('#/studio')) ? 'on' : ''}">${l}</a>`).join('')}</nav>
     ${S.pages.length ? `<label class="pagebadge">Page <select id="pagesel">${S.pages.map(p => `<option value="${esc(p.slug)}" ${p.slug === S.page ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>` : ''}
@@ -149,7 +149,7 @@ function healthBanner() {
   const red = h.status === 'red', shown = rs.slice(0, 3);
   return `<div class="bar"><div class="job ${red ? 'err' : ''}" style="flex:1">${red ? '⛔ Part of the pipeline is not working' : '⚠ Part of the pipeline is running with problems'}:
     ${shown.map(r => esc(r.plain || r.text)).join(' · ')}${rs.length > shown.length ? ` · and ${rs.length - shown.length} more` : ''}
-    ${S.me && S.me.user && S.me.user.role === 'admin' ? ' <a href="#/admin/health">Details</a>' : ''}</div></div>`;
+    ${S.me && S.me.user && S.me.user.role === 'super' ? ' <a href="#/admin/health">Details</a>' : ''}</div></div>`;
 }
 function loadHealth() {
   if (!S.me || Date.now() - S.healthAt < 60e3) return;
@@ -420,7 +420,7 @@ function lineFor(p, j) {
   if (going && j.stale) return `<div class="job err">${label} is taking far longer than it should: the Studio session doing it stopped answering. It is restarted automatically; ${j.kind === 'compose' ? 'press Start again' : 'press the button again'} to begin a new one now.</div>`;
   if (going) return `<div class="job">${label}… (Studio routine; this page updates by itself)</div>`;
   // (detail: the Studio machine's own error, shown to admins only)
-  if (j.status === 'failed' || j.error) return `<div class="job err">${label} failed: ${esc(j.error || 'unknown error')}${j.detail && S.me && S.me.user.role === 'admin'
+  if (j.status === 'failed' || j.error) return `<div class="job err">${label} failed: ${esc(j.error || 'unknown error')}${j.detail && S.me && S.me.user.role === 'super'
     ? `<div class="muted">For the admin: ${esc(j.detail)}</div>` : ''}</div>`;
   if (j.status === 'cancelled')                                        // (stopped when someone cleared the batch)
     return `<div class="job">${label} was stopped${S.batch && S.batch.cleared ? ' when the batch was cleared: restore the batch (above), then press the button again.' : ': press the button again.'}</div>`;
@@ -1136,12 +1136,12 @@ async function adminUsers() {
   const pageOpts = sel => shown.map(p => `<label style="margin-right:10px"><input type="checkbox" value="${esc(p.slug)}" ${sel.includes(p.slug) ? 'checked' : ''}> ${esc(p.name)}</label>`).join('');
   const rowHtml = u => `<tr data-u="${esc(u.id)}">
       <td>${esc(u.email)}<div class="muted">${esc(u.name)}${u.active ? '' : ' · <span class="pill no">deactivated</span>'}${u.locked ? ' · <span class="pill warn">locked</span>' : ''}${u.reset_requested ? ` · asked for a reset ${ago(u.reset_requested)}` : ''}</div></td>
-      <td><select data-role><option value="editor" ${u.role === 'editor' ? 'selected' : ''}>Editor</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option></select></td>
+      <td><select data-role><option value="editor" ${u.role === 'editor' ? 'selected' : ''}>Editor</option><option value="owner" ${u.role === 'owner' ? 'selected' : ''}>Owner</option><option value="super" ${u.role === 'super' ? 'selected' : ''}>Admin</option></select></td>
       <td data-pages>${pageOpts(u.pages)}</td><td class="muted">${u.last_login ? ago(u.last_login) : 'never'}</td>
       <td><button class="btn small" data-save>Save</button> <button class="btn small" data-reset>Reset link</button> <button class="btn small ${u.active ? 'danger' : ''}" data-act>${u.active ? 'Deactivate' : 'Activate'}</button></td></tr>`;
   $('#main').innerHTML = adminTabs('users') + `<div class="grid">
     <form class="panel grid" id="inv"><h3>Invite a user</h3><div class="row"><input type="email" name="email" placeholder="Email" required><input type="text" name="name" placeholder="Name">
-      <select name="role"><option value="editor">Editor</option><option value="admin">Admin</option></select></div>
+      <select name="role"><option value="editor">Editor</option><option value="super">Admin</option></select></div>
       <div>${pageOpts([])}</div><div class="row"><button class="btn primary">Invite</button></div><div id="invout"></div></form>
     <div class="panel"><div class="adminscroll"><table id="users"><tr><th>User</th><th>Role</th><th>Pages</th><th>Last sign-in</th><th></th></tr>${users.map(rowHtml).join('')}</table></div></div></div>`;
   // one row drawn again (the others keep what the admin ticked and has not saved yet)
@@ -1767,7 +1767,7 @@ async function route() {
   }
   // a page or the admin role given (or taken away) since: asked again at most once a minute, and at
   // once when an admin screen is opened without the admin role (it may have just been given)
-  else if (Date.now() - (S.meAt || 0) > 60e3 || (h.startsWith('/admin') && S.me.user.role !== 'admin')) {
+  else if (Date.now() - (S.meAt || 0) > 60e3 || (h.startsWith('/admin') && S.me.user.role !== 'super')) {
     const before = S.me;
     await loadMe().catch(() => {});
     const msg = accessTaken(before);
@@ -1789,7 +1789,7 @@ async function route() {
     }
     if (parts[0] === 'studio' && parts[1] === 'topics') return await topicsView();
     if (parts[0] === 'templates') return await templatesView(false);
-    if (parts[0] === 'admin' && S.me.user.role === 'admin') {
+    if (parts[0] === 'admin' && S.me.user.role === 'super') {
       if (parts[1] === 'page') await adminPage(parts[2]);
       else if (parts[1] === 'templates') await templatesView(true);
       else await ({ users: adminUsers, pages: adminPages, health: adminHealth, audit: adminAudit, usage: adminUsage }[parts[1]] || adminUsers)();

@@ -7,7 +7,8 @@
 // Only these moves are taken, so the publisher's rules hold here too, not only in its prompt:
 // publishing from approved; scheduled or posted from publishing or scheduled; failed from approved,
 // publishing or scheduled. Anything else is a 409 (e.g. "scheduled" for a draft nobody claimed).
-// A claim is also refused for a slot under 45 minutes from another claimed or scheduled post on
+// A claim is also refused for a page that cannot publish (lib/pages.js notPublishable: not live, no
+// account, an account on the deny list), for a slot under 45 minutes from another claimed or scheduled post on
 // the page (takeSlot), for a Studio draft the Studio has sent again as a new one (resentAs), and
 // while the draft a resent one was resent from is being scheduled.
 // 'missing': a run's lookups did not find a scheduled post (see missing below). 'needs_action'
@@ -17,6 +18,7 @@ import { loadDraft, setStatus, getJson } from '../lib/store.js';
 import { usage } from '../lib/audit.js';
 import { put, list, del } from '../lib/blob.js';
 import * as db from '../lib/db.js';
+import { notPublishable } from '../lib/pages.js';
 
 const { getRecord, putRecord } = db;
 // The health records below are changed by several publisher runs at once (every approval starts
@@ -301,6 +303,10 @@ export default async function handler(req, res) {
   if (!NEXT[status].includes(d.status))
     return res.status(409).json({ error: `not ${status}: the draft is ${d.status} (only from ${NEXT[status].join(' or ')})` });
   if (status === 'publishing') {
+    // Only a live page's post, on the account the onboarding routine linked, never one on the deny
+    // list (docs/PRODUCT.md "Safety rules"): a paused page's post waits in the queue until it is resumed
+    const closed = notPublishable(await getRecord('pages', d.page).catch(() => undefined) ?? null);
+    if (closed) return res.status(409).json({ error: `not publishing: ${closed}` });
     // One publisher run per approval: several runs can be going at once (every approval starts
     // one), and each must claim a draft before scheduling it. The claim blob is created only if
     // it does not exist yet, so exactly one run wins; the others get 409 and skip the draft.

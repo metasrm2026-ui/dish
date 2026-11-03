@@ -1,9 +1,9 @@
-// Admin screens and accounts: what one admin saves is never undone by another admin, by the user
+// Admin screens and accounts (the product owner's): what one admin saves is never undone by another admin, by the user
 // signing in or by an upload finishing; settings the routines cannot read are refused; sign-in locks.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { client } from './helpers.mjs';
+import { client, makeLive, workspace } from './helpers.mjs';
 import { resetReads } from '../lib/db.js';
 
 const R = { routine: true };
@@ -13,10 +13,10 @@ const tinyJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP////////////////
 const token = link => link.split('#reset=')[1];
 
 const owner = client(), robot = client();
-let slug;
+let slug, WS;
 async function invite(email, extra = {}) {
   const c = client();
-  const inv = await owner.call('POST', '/api/admin/users', { email, role: 'editor', pages: [slug], ...extra });
+  const inv = await owner.call('POST', '/api/admin/users', { email, role: 'editor', workspace: WS, pages: [slug], ...extra });
   assert.equal(inv.status, 200, JSON.stringify(inv.body));
   assert.equal((await c.call('POST', '/api/auth/reset', { token: token(inv.body.setup_link), password: PW })).status, 200);
   return { c, id: inv.body.user.id };
@@ -43,7 +43,9 @@ function holdNextRead(re) {
 test.before(async () => {
   const boot = await robot.call('POST', '/api/routine/bootstrap', { email: 'owner@example.com', name: 'Owner' }, R);
   assert.equal((await owner.call('POST', '/api/auth/reset', { token: token(boot.body.setup_link), password: PW })).status, 200);
-  slug = (await owner.call('POST', '/api/admin/pages', { name: 'Dummy Sports', socialpilot_login_id: '999' })).body.page.slug;
+  WS = (await workspace(owner)).id;
+  slug = (await owner.call('POST', '/api/admin/pages', { name: 'Dummy Sports', workspace: WS })).body.page.slug;
+  await makeLive(slug, '999');
 });
 
 test('time zones: only names the routines can read are saved', async () => {
@@ -52,7 +54,7 @@ test('time zones: only names the routines can read are saved', async () => {
     assert.equal(r.status, 400, tz);
     assert.match(r.body.error, /time zone must be a name like America\/New_York/);
   }
-  assert.equal((await owner.call('POST', '/api/admin/pages', { name: 'Zone Page', timezone: 'Eastern' })).status, 400);
+  assert.equal((await owner.call('POST', '/api/admin/pages', { name: 'Zone Page', timezone: 'Eastern', workspace: WS })).status, 400);
   assert.equal((await pageOf(slug)).timezone, 'America/New_York', 'nothing saved');
   assert.equal((await owner.call('PATCH', `/api/admin/pages/${slug}`, { timezone: 'Asia/Calcutta' })).body.page.timezone, 'Asia/Kolkata');
   assert.equal((await owner.call('PATCH', `/api/admin/pages/${slug}`, { timezone: 'America/Buenos_Aires' })).body.page.timezone,
@@ -60,7 +62,7 @@ test('time zones: only names the routines can read are saved', async () => {
   assert.equal((await owner.call('PATCH', `/api/admin/pages/${slug}`, { timezone: 'Europe/london' })).body.page.timezone,
                'Europe/London', 'stored as zoneinfo spells it: it does not ignore letter case');
   assert.equal((await owner.call('PATCH', `/api/admin/pages/${slug}`, { timezone: 'America/NEW_YORK' })).body.page.timezone, 'America/New_York');
-  assert.equal((await owner.call('POST', '/api/admin/pages', { name: 'Case Zone', timezone: 'Asia/TOKYO' })).body.page.timezone, 'Asia/Tokyo');
+  assert.equal((await owner.call('POST', '/api/admin/pages', { name: 'Case Zone', timezone: 'Asia/TOKYO', workspace: WS })).body.page.timezone, 'Asia/Tokyo');
   assert.equal((await owner.call('PATCH', `/api/admin/pages/${slug}`, { timezone: 'UTC' })).body.page.timezone, 'UTC');
   assert.equal((await owner.call('PATCH', `/api/admin/pages/${slug}`, { timezone: 'America/New_York' })).body.page.timezone, 'America/New_York');
   const cfg = (await robot.call('GET', '/api/routine/config', undefined, R)).body.pages.find(p => p.slug === slug);
@@ -98,12 +100,12 @@ test('settings saved while a source is added or an upload finishes keep the sour
   h = holdNextRead(new RegExp(`db/pages/${slug}/`));
   const add = owner.call('POST', `/api/admin/pages/${slug}/sources`, { url: 'https://example.com/b', type: 'website' });
   await h.reached;
-  assert.equal((await other.call('PATCH', `/api/admin/pages/${slug}`, { socialpilot_login_id: '424242' })).status, 200);
+  assert.equal((await other.call('PATCH', `/api/admin/pages/${slug}`, { language: 'Spanish' })).status, 200);
   h.release();
   assert.equal((await add).status, 200);
   p = await pageOf(slug);
   assert.equal(p.source_count, 2);
-  assert.equal(p.socialpilot_login_id, '424242', 'the account saved meanwhile is kept');
+  assert.equal(p.language, 'Spanish', 'the setting saved meanwhile is kept');
   // a settings save that read the page before an upload finished keeps the new document version
   h = holdNextRead(new RegExp(`db/pages/${slug}/`));
   const logo = owner.call('PATCH', `/api/admin/pages/${slug}`, { theme: { logo_text: 'DUMMY' } });
@@ -142,7 +144,7 @@ test('a user deactivated while they sign in stays deactivated', async () => {
 });
 
 test('saving a user\'s pages keeps an archived page the row could not show', async () => {
-  const second = (await owner.call('POST', '/api/admin/pages', { name: 'Second Page' })).body.page.slug;
+  const second = (await owner.call('POST', '/api/admin/pages', { name: 'Second Page', workspace: WS })).body.page.slug;
   const { id } = await invite('pages@example.com', { pages: [slug, second] });
   await owner.call('PATCH', `/api/admin/pages/${second}`, { archived: true });
   assert.equal((await owner.call('PATCH', `/api/admin/users/${id}`, { pages: [slug] })).status, 200);
@@ -151,12 +153,12 @@ test('saving a user\'s pages keeps an archived page the row could not show', asy
   // unticking a page that is not archived still removes it
   assert.deepEqual((await owner.call('PATCH', `/api/admin/users/${id}`, { pages: [second] })).body.user.pages, [second]);
   // a role change sends no pages, and keeps them
-  assert.deepEqual((await owner.call('PATCH', `/api/admin/users/${id}`, { role: 'admin' })).body.user.pages, [second]);
+  assert.deepEqual((await owner.call('PATCH', `/api/admin/users/${id}`, { role: 'owner' })).body.user.pages, [second]);
 });
 
 test('two admins giving a user pages: each one\'s ticks and unticks are kept', async () => {
-  const second = (await owner.call('POST', '/api/admin/pages', { name: 'Grant Two' })).body.page.slug;
-  const third = (await owner.call('POST', '/api/admin/pages', { name: 'Grant Three' })).body.page.slug;
+  const second = (await owner.call('POST', '/api/admin/pages', { name: 'Grant Two', workspace: WS })).body.page.slug;
+  const third = (await owner.call('POST', '/api/admin/pages', { name: 'Grant Three', workspace: WS })).body.page.slug;
   const { id } = await invite('grants@example.com');
   // admin B gives the second page; admin A, whose row still shows only the first, ticks the third
   assert.deepEqual((await owner.call('PATCH', `/api/admin/users/${id}`, { pages_add: [second] })).body.user.pages, [slug, second]);
@@ -314,10 +316,25 @@ test('post from a link: any page added in Admin that the editor has, and no othe
   const made = await ed.call('POST', '/api/links', { url: 'https://example.com/story-1', page: slug });
   assert.equal(made.status, 201, JSON.stringify(made.body));
   assert.equal(made.body.link.page_name, 'Dummy Sports', 'the name set in Admin');
-  const other = (await owner.call('POST', '/api/admin/pages', { name: 'Not Theirs' })).body.page.slug;
+  const other = (await owner.call('POST', '/api/admin/pages', { name: 'Not Theirs', workspace: WS })).body.page.slug;
+  await makeLive(other);
   assert.equal((await ed.call('POST', '/api/links', { url: 'https://example.com/story-2', page: other })).status, 400);
   assert.equal((await ed.call('POST', '/api/links', { url: 'https://example.com/story-2', page: 'nowhere' })).status, 400);
   assert.equal((await owner.call('POST', '/api/links', { url: 'https://example.com/story-2', page: other })).status, 201, 'admins: every page');
   await owner.call('PATCH', `/api/admin/pages/${other}`, { archived: true });
   assert.equal((await owner.call('POST', '/api/links', { url: 'https://example.com/story-3', page: other })).status, 400, 'not an archived page');
+});
+
+test('an invite from the users screen (pages, no workspace) joins the workspace of those pages; pages of two workspaces are refused', async () => {
+  const r = await owner.call('POST', '/api/admin/users', { email: 'screen-invite@example.com', role: 'editor', pages: [slug] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual([r.body.user.workspace, r.body.user.pages], [WS, [slug]]);
+  const other = (await workspace(owner, 'Second Demo Workspace')).id;
+  const theirs = (await owner.call('POST', '/api/admin/pages', { name: 'Second Demo Page', workspace: other })).body.page.slug;
+  for (const pages of [[slug, theirs], []]) {
+    const x = await owner.call('POST', '/api/admin/users', { email: `mixed-${pages.length}@example.com`, role: 'editor', pages });
+    assert.equal(x.status, 400);
+    assert.equal(x.body.error, 'choose the workspace the user belongs to');
+  }
+  assert.equal((await owner.call('POST', '/api/admin/users', { email: 'second-admin@example.com', role: 'super' })).body.user.workspace, null);
 });

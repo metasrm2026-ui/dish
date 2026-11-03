@@ -1,0 +1,3 @@
+# a made-up deny list for the tests (lib/deny.js reads config/socialpilot.yaml in this form)
+blocked_login_ids: [900001, 900002]
+accounts: {}

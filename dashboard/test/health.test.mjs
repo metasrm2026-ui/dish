@@ -2,7 +2,7 @@
 // the second routine secret used while it is rotated.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { client } from './helpers.mjs';
+import { client, workspace } from './helpers.mjs';
 
 process.env.BLOB_RETRY_MS = '1';                      // retries without the production waits
 const R = { routine: true };
@@ -243,10 +243,10 @@ test('health counts routine runs, not command runs; what needs a person is its o
   await healthy(now);
   for (const [i, ago] of [50, 30, 10].entries())
     await H.saveRun(report({ command: 'publish plan', routine: 'publisher', started_at: now - ago * M, ended_at: now - ago * M + 20e3,
-                             summary: { session: `p${i}`, delete_in_socialpilot: ['huddle-orig'], no_account: i === 2 ? ['newpage-1'] : [] } }), now);
+                             summary: { session: `p${i}`, delete_in_socialpilot: ['demo-orig'], no_account: i === 2 ? ['newpage-1'] : [] } }), now);
   h = await H.computeHealth(now);
   assert.deepEqual(codes(h), ['amber publisher_needs_person']);
-  assert.deepEqual(h.reasons[0].ids, ['huddle-orig', 'newpage-1']);
+  assert.deepEqual(h.reasons[0].ids, ['demo-orig', 'newpage-1']);
   assert.match(h.reasons[0].text, /1 outdated original post\(s\) are still scheduled in SocialPilot: a person deletes them there/);
   await H.saveRun(report({ command: 'publish plan', routine: 'publisher', started_at: now - 2 * M, ended_at: now - M, summary: { session: 'p9' } }), now);
   assert.deepEqual(codes(await H.computeHealth(now)), [], 'done: gone with the next plan');
@@ -259,7 +259,7 @@ test("the publisher's notes for a person: red unless the code only asks someone 
   // routes/result.js health/needs_action, which only the review page used to read. The code's own
   // notes asking a person to look (bore/cli.py unconfirmed, result.js missing and hold): amber
   await setNeedsAction(id('unseen'), PAGE, "SocialPilot's queue did not show it after CreatePost: check in SocialPilot that it is "
-                                           + 'scheduled once, on account 2662938, for 2026-10-22 18:30 (Asia/Kolkata)');
+                                           + 'scheduled once, on account 900001, for 2026-10-22 18:30 (Asia/Kolkata)');
   await setNeedsAction(id('lost'), PAGE, 'look on the Facebook page: SocialPilot has no record of this post, it may or may not have gone out');
   await setNeedsAction(id('unknown'), PAGE, 'look in SocialPilot and on the Facebook page: the publisher could not check whether this post is there already');
   let h = await H.computeHealth(now);
@@ -267,7 +267,7 @@ test("the publisher's notes for a person: red unless the code only asks someone 
   assert.deepEqual(h.reasons[0].ids, [id('unseen'), id('lost'), id('unknown')]);
   assert.equal(h.reasons[0].text, '3 post(s) need a person to check them in SocialPilot or on the Facebook page (the review page lists them).');
   // a copy on the account the publisher must never use, and a second copy (bore/publish.py verify_queued's words): red, first
-  await setNeedsAction(id('copy'), PAGE, 'a copy is on the wrong SocialPilot account (Keaton Caleb, loginId 2662937): delete it in SocialPilot; '
+  await setNeedsAction(id('copy'), PAGE, 'a copy is on the wrong SocialPilot account (Demo Person, loginId 900002): delete it in SocialPilot; '
                                          + '2 copies are queued in SocialPilot: delete all but one');
   // an outdated original, noted by the plan and in its report: counted once
   await setNeedsAction(id('orig'), PAGE, 'delete it in SocialPilot: it is scheduled for 2026-10-22 18:30 (Asia/Kolkata) and its update x replaces it',
@@ -278,7 +278,7 @@ test("the publisher's notes for a person: red unless the code only asks someone 
   assert.deepEqual(codes(h), ['red publisher_needs_person']);
   assert.deepEqual(h.reasons[0].ids, [id('copy'), id('unseen'), id('lost'), id('unknown'), id('orig')]);
   assert.match(h.reasons[0].text, /^1 post\(s\) need a person in SocialPilot now: what the publisher found there goes out against the publishing rules unless someone fixes or deletes it \(e\.g\. a second copy, the wrong account or time\); 3 post\(s\) need a person .*; 1 outdated original post\(s\) are still scheduled/);
-  assert.ok(!/Keaton|2662937|2662938/.test(JSON.stringify(h)), "counts in the text, never the notes' words");
+  assert.ok(!/Demo Person|900002|900001/.test(JSON.stringify(h)), "counts in the text, never the notes' words");
   // marked done on the review page: amber for what is left, then nothing
   await setNeedsAction(id('copy'), PAGE, '');
   assert.deepEqual(codes(await H.computeHealth(now)), ['amber publisher_needs_person']);
@@ -291,7 +291,7 @@ test("the publisher's notes for a person: red unless the code only asks someone 
   const robot = client();
   for (const [s, text] of [['found', 'delete the copy scheduled for 2026-10-21 18:30'],               // PUBLISH.md's own example
                            ['twice', '2 copies of this post are queued in SocialPilot: delete one'],
-                           ['keaton', 'a second copy is scheduled on Keaton Caleb (2662937): delete it']]) {
+                           ['person', 'a second copy is scheduled on Demo Person (900002): delete it']]) {
     const d = await draft(s, now - 2 * HR, [['approved', now - 2 * HR], ['publishing', now - HR], ['scheduled', now - HR + M]]);
     assert.equal((await robot.call('POST', '/api/result', { id: d, status: 'needs_action', error: text }, R)).status, 200);
     h = await H.computeHealth(now);
@@ -310,9 +310,9 @@ test("the publisher's notes for a person: red unless the code only asks someone 
                            summary: { session: 'p3', delete_in_socialpilot: 'x', no_account: { a: 1 } } }), now);
   assert.deepEqual(codes(await H.computeHealth(now)), []);
   await H.saveRun(report({ command: 'publish plan', routine: 'publisher', started_at: now - 20e3, ended_at: now - 10e3,
-                           summary: { session: 'p4', delete_in_socialpilot: ['huddle-orig', 7], no_account: null } }), now);
+                           summary: { session: 'p4', delete_in_socialpilot: ['demo-orig', 7], no_account: null } }), now);
   h = await H.computeHealth(now);
-  assert.deepEqual([codes(h), h.reasons[0].ids], [['amber publisher_needs_person'], ['huddle-orig']]);
+  assert.deepEqual([codes(h), h.reasons[0].ids], [['amber publisher_needs_person'], ['demo-orig']]);
 });
 
 test('health reads are bounded: at most 6 storage reads at a time, at most 60 jobs, and kept 5 minutes', async () => {
@@ -507,16 +507,19 @@ test('health for people and for the workflow; the second routine secret while it
   assert.equal((await robot.call('GET', '/api/routine/health', undefined, R)).body.checked_at, h.body.checked_at, 'the same status');
 
   // the settings to check are the admin's: editors get the reason without them
-  await putRecord('pages', PAGE, { slug: PAGE, name: 'Dummy Sports' });
+  const WS = (await workspace(admin)).id;
+  await putRecord('pages', PAGE, { slug: PAGE, name: 'Dummy Sports', workspace: WS, status: 'live' });
   const job = `${PAGE}-${Date.now() - 2 * M}-nf`;
   await putRecord('jobs', job, { id: job, kind: 'ideas', page: PAGE, status: 'queued', created_at: Date.now() - 2 * M, fired: false, fire_status: 403 });
   await H.health({ fresh: true });
-  const inv = await admin.call('POST', '/api/admin/users', { email: 'ed@example.com', role: 'editor', pages: [PAGE] });
+  const inv = await admin.call('POST', '/api/admin/users', { email: 'ed@example.com', role: 'editor', workspace: WS, pages: [PAGE] });
   const editor = client();
   await editor.call('POST', '/api/auth/reset', { token: inv.body.setup_link.split('#reset=')[1], password: 'editor pass 77' });
   const [forAdmin, forEditor] = [(await admin.call('GET', '/api/health')).body, (await editor.call('GET', '/api/health')).body];
   assert.match(forAdmin.reasons.find(r => r.code === 'studio_fire_failed').admin, /answered 403: check STUDIO_FIRE_URL/);
-  assert.equal(forEditor.reasons.find(r => r.code === 'studio_fire_failed').text, forAdmin.reasons.find(r => r.code === 'studio_fire_failed').text);
+  // the editor's words never carry the product-wide count (other workspaces' jobs are in it)
+  assert.equal(forEditor.reasons.find(r => r.code === 'studio_fire_failed').text,
+               'Some Studio jobs are waiting: the Studio routine could not be started: the admin has been told.');
   assert.ok(!JSON.stringify(forEditor).includes('STUDIO_FIRE'), 'no setting names on an editor\'s banner');
 
   process.env.ROUTINE_SECRET_NEXT = 'routine-next-secret';

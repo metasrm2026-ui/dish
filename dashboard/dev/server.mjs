@@ -1,6 +1,10 @@
 // Local preview of the whole tool against the in-memory store (no Vercel, no real data):
-//   node dev/server.mjs [port]      then open http://localhost:3000  (admin@example.com / dev password 123)
-// Seeds a dummy admin, editor, page and story feed. Nothing is persisted.
+//   node dev/server.mjs [port]      then open http://localhost:3000  (password: dev password 123)
+// Seeds, all made up: the product owner admin@example.com (super), a tester's workspace "Demo
+// Workspace" with its owner tester@example.com, its live page Dummy Sports (and a draft page Demo
+// Page, to press Go live on) and its editor editor@example.com, and a story feed. Nothing is persisted.
+// Sign-in is on here (the seeded people sign in); OPEN_ACCESS=1 node dev/server.mjs opens straight in
+// as the open-access owner instead (lib/session.js).
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
@@ -11,6 +15,7 @@ process.env.BLOB_MOCK_BASE = `http://localhost:${PORT}/_blob/`;
 process.env.DATA_KEY ||= Buffer.alloc(32, 7).toString('base64');
 process.env.SESSION_SECRET ||= 'dev-session-secret-0123456789abcdef0123456789';
 process.env.ROUTINE_SECRET ||= 'dev-routine';
+process.env.OPEN_ACCESS ??= '0';
 const { mockFetch } = await import('../lib/blob.js');
 globalThis.fetch = mockFetch(globalThis.fetch);
 const { default: main } = await import('../api/main.js');
@@ -57,10 +62,19 @@ server.listen(PORT, async () => {
   const boot = await api('POST', '/api/routine/bootstrap', { email: 'admin@example.com', name: 'Dev Admin' }, '', true);
   await api('POST', '/api/auth/reset', { token: boot.body.setup_link.split('#reset=')[1], password: PW });
   const { cookie } = await api('POST', '/api/auth/login', { email: 'admin@example.com', password: PW });
-  const pg = await api('POST', '/api/admin/pages', { name: 'Dummy Sports', fb_page_id: '123', socialpilot_login_id: '999' }, cookie);
+  // the tester's workspace (Admin > Testers) and its owner
+  const t = await api('POST', '/api/admin/testers', { email: 'tester@example.com', name: 'Dev Tester', workspace_name: 'Demo Workspace' }, cookie);
+  await api('POST', '/api/auth/reset', { token: t.body.setup_link.split('#reset=')[1], password: PW });
+  const tc = (await api('POST', '/api/auth/login', { email: 'tester@example.com', password: PW })).cookie;
+  const pg = await api('POST', '/api/pages', { name: 'Dummy Sports', fb_page_url: 'https://www.facebook.com/dummysports',
+                                               niche: 'Made-up results of a made-up league.', fb_page_id: '123' }, tc);
   const slug = pg.body.page.slug;
-  await api('PATCH', '/api/admin/users/' + (await api('GET', '/api/auth/me', null, cookie)).body.user.id, { pages: [slug] }, cookie);
-  const inv = await api('POST', '/api/admin/users', { email: 'editor@example.com', name: 'Dev Editor', role: 'editor', pages: [slug] }, cookie);
+  await api('POST', '/api/pages', { name: 'Demo Page', niche: 'Made-up news about a made-up hobby.' }, tc);
+  // live on a made-up SocialPilot account, as the onboarding routine leaves a page (ONBOARD.md)
+  const { updateRecord } = await import('../lib/db.js');
+  await updateRecord('pages', slug, cur => ({ ...cur, status: 'live', socialpilot_connected: { at: Date.now(), by: 'tester@example.com' },
+                                              socialpilot_login_id: '999', onboarding: { started_at: Date.now(), steps: [], error: '', done_at: Date.now() } }));
+  const inv = await api('POST', '/api/workspace/editors', { email: 'editor@example.com', name: 'Dev Editor', pages: [slug] }, tc);
   await api('POST', '/api/auth/reset', { token: inv.body.setup_link.split('#reset=')[1], password: PW });
   const now = Date.now();
   const img = i => `https://picsum.photos/seed/bore${i}/800/1000`;
@@ -70,5 +84,5 @@ server.listen(PORT, async () => {
     ideas: [{ title: 'Stat card', template: 'stat_card', description: 'One huge number with the player photo.' }, { title: 'Then vs now', template: 'then_vs_now', description: 'Two photos side by side.' }],
     images: [{ url: img(i), source: 'web', credit: 'picsum.photos', size: '800x1000' }] }));
   await api('POST', '/api/routine/feed', { page: slug, stories }, '', true);
-  console.log(`dev server http://localhost:${PORT}  admin@example.com / editor@example.com  password: ${PW}`);
+  console.log(`dev server http://localhost:${PORT}  admin@example.com / tester@example.com / editor@example.com  password: ${PW}`);
 });

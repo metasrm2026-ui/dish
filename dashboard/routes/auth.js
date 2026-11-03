@@ -1,14 +1,17 @@
 // /api/auth/*  login, logout, who am I, change password, reset with a one-time link, forgot.
-import { login, clearCookie, publicUser, userId, hashPassword, passwordProblem } from '../lib/session.js';
+import { login, clearCookie, publicUser, userId, hashPassword, passwordProblem, openAccess } from '../lib/session.js';
 import { getRecord, updateRecord, listRecords } from '../lib/db.js';
 import { issueReset, resetValid, sendMail } from '../lib/resets.js';
 import { audit } from '../lib/audit.js';
 import { ok, bad, clean, siteOrigin } from '../lib/http.js';
+import { mayUse, mayManage } from '../lib/tenancy.js';
+import { statusOf } from '../lib/pages.js';
 
+// the pages this person may use (lib/tenancy.js): their workspace's, an editor's own; the super's: all
 async function myPages(u) {
-  const pages = (await listRecords('pages')).filter(p => !p.archived);
-  return pages.filter(p => u.role === 'admin' || (u.pages || []).includes(p.slug))
-    .map(p => ({ slug: p.slug, name: p.name, theme: p.theme || {} }));
+  const pages = (await listRecords('pages')).filter(p => !p.archived && mayUse(u, p));
+  return pages.map(p => ({ slug: p.slug, name: p.name, theme: p.theme || {}, status: statusOf(p), workspace: p.workspace || null,
+                           can_manage: mayManage(u, p) }));
 }
 
 export default async function handler(req, res) {
@@ -26,7 +29,10 @@ export default async function handler(req, res) {
   }
   if (op === 'me') {
     if (!req.user) return bad(res, 'sign in first', 401);
-    return ok(res, { user: publicUser(req.user), pages: await myPages(req.user) });
+    const ws = req.user.workspace ? await getRecord('workspaces', req.user.workspace) : null;
+    // open_access: nobody signs in here now (lib/session.js): the screens show no sign-in or sign-out
+    return ok(res, { user: publicUser(req.user), pages: await myPages(req.user),
+                     workspace: ws ? { id: ws.id, name: ws.name, limits: ws.limits || {} } : null, open_access: openAccess() });
   }
   if (op === 'password' && req.method === 'POST') {
     const u = req.user;

@@ -2,6 +2,7 @@
 //   STUDIO: the Studio jobs routine (STUDIO_FIRE_URL / STUDIO_FIRE_TOKEN). Never the publisher:
 //           publishing stays in its own routine. Without a token, jobs wait for the next run.
 //   ROUTINE: the SocialPilot publisher (ROUTINE_FIRE_URL / ROUTINE_FIRE_TOKEN).
+//   ONBOARD: the onboarding routine, when an owner presses Go live (ONBOARD_FIRE_URL / ONBOARD_FIRE_TOKEN).
 // Never throws, and gives up after FIRE_TIMEOUT_MS: waking a routine is a nudge (the hourly runs
 // pick the work up anyway), so it must never fail or hold up what the editor just did.
 const FIRE_TIMEOUT_MS = 8000;

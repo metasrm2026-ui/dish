@@ -17,6 +17,8 @@ import { postText, cutText, CAPTION_MAX } from '../lib/caption.js';
 import { needsAction, setNeedsAction } from './result.js';
 import { takeBack } from './decide.js';
 import { approvedSpecs } from './templates.js';
+import { pageScope, inScope, refusal, mayUse } from '../lib/tenancy.js';
+import { statusOf, notPublishable } from '../lib/pages.js';
 
 const MAX_STORIES = 5;
 const GAP_MIN = Number(process.env.SCHEDULE_GAP_MINUTES || 45);
@@ -57,17 +59,26 @@ export function faceId(i) {
            id_ref: ['espn', 'wikipedia'].includes(i.id_ref) ? i.id_ref : '' };
 }
 
-async function pageFor(req, res, slug) {
+// A paused page's Studio is read only (docs/PRODUCT.md "Safety rules"), and so is one that is not
+// live yet: its story feed and publishing start when it goes live.
+const readOnly = p => (statusOf(p) === 'paused' ? 'this page is paused: Studio is read only until it is resumed'
+  : statusOf(p) !== 'live' ? 'this page is not live yet: Studio opens once it has gone live' : '');
+
+async function pageFor(req, res, slug, write = false) {
   const p = slug && await getRecord('pages', slug);
   if (!p || p.archived) { bad(res, 'no such page', 404); return null; }
-  if (!await canUsePage(req.user, slug)) { bad(res, 'you do not have access to this page', 403); return null; }
+  if (!mayUse(req.user, p)) { const r = refusal(req.user, p); bad(res, r.error, r.status); return null; }
+  if (write && readOnly(p)) { bad(res, readOnly(p), 409); return null; }
   return p;
 }
 
-async function batchFor(req, res, id) {
+// a batch of a page this person may use (another workspace's is no batch at all); write: the page is live
+async function batchFor(req, res, id, write = false) {
   const bt = id && await getRecord('batches', id);
   if (!bt) { bad(res, 'no such batch', 404); return null; }
-  if (!await canUsePage(req.user, bt.page)) { bad(res, 'you do not have access to this page', 403); return null; }
+  const p = await getRecord('pages', bt.page);
+  if (!mayUse(req.user, p)) { const r = refusal(req.user, p); bad(res, r.status === 404 ? 'no such batch' : r.error, r.status); return null; }
+  if (write && readOnly(p)) { bad(res, readOnly(p), 409); return null; }
   return bt;
 }
 
@@ -473,8 +484,8 @@ export default async function handler(req, res) {
   const b = req.body || {};
 
   if (what === 'pages' && req.method === 'GET') {
-    const pages = (await listRecords('pages')).filter(p => !p.archived && (u.role === 'admin' || (u.pages || []).includes(p.slug)));
-    return ok(res, { pages: pages.map(p => ({ slug: p.slug, name: p.name, theme: p.theme || {} })) });
+    const pages = (await listRecords('pages')).filter(p => !p.archived && mayUse(u, p));
+    return ok(res, { pages: pages.map(p => ({ slug: p.slug, name: p.name, theme: p.theme || {}, status: statusOf(p), read_only: !!readOnly(p) })) });
   }
 
   // 4.3 topic selection: the page's feed (prepared by the hourly routine), filtered by window
@@ -531,7 +542,8 @@ export default async function handler(req, res) {
     let n = 0;
     for (const bid of ids) {
       const bt = await getRecord('batches', bid);
-      if (!bt || bt.cleared || !await canUsePage(u, bt.page)) continue;
+      const pg = bt && await getRecord('pages', bt.page);
+      if (!bt || bt.cleared || !mayUse(u, pg) || readOnly(pg)) continue;
       const waiting = new Set();
       for (const p of bt.posts) {                                      // drop its waiting Studio jobs
         for (const j of [...(p.job && p.job.status === 'queued' ? [p.job] : []), ...(p.under_way || [])]) {
@@ -557,7 +569,8 @@ export default async function handler(req, res) {
       // a batch a colleague cleared stays on its editor's list for a day, saying who cleared it (to
       // restore it): they may not have been on its page to see the note there
       const listed = x => !x.cleared || (x.user === u.email && x.cleared.by !== u.email && Date.now() - (x.cleared.at || 0) < 24 * 3600e3);
-      const all = (await listRecords('batches')).filter(x => listed(x) && (!slug || x.page === slug) && (u.role === 'admin' || (u.pages || []).includes(x.page)));
+      const scope = await pageScope(req);
+      const all = (await listRecords('batches')).filter(x => listed(x) && (!slug || x.page === slug) && inScope(scope, x.page));
       // a post with the publisher may have failed since its editor left: its batch is unfinished again
       // (each such draft's state is read from its listing, one read; a batch whose draft moved on is
       // read as opening it does, and saved)
@@ -574,7 +587,7 @@ export default async function handler(req, res) {
                      posts: x.posts.map(p => ({ id: p.id, headline: p.story.headline, status: p.status })) })) });
     }
     if (req.method === 'POST' && !id) {                              // new batch from selected stories
-      const p = await pageFor(req, res, String(b.page || ''));
+      const p = await pageFor(req, res, String(b.page || ''), true);
       if (!p) return;
       const feed = await getRecord('feed', p.slug);
       const byId = Object.fromEntries(((feed && feed.stories) || []).map(s => [s.id, s]));
@@ -600,7 +613,8 @@ export default async function handler(req, res) {
       if (job && job.job) await wake(job.job);
       return ok(res, { batch: job ? job.batch : bt, ideas_job: job && job.job && job.job.id });
     }
-    const bt = await batchFor(req, res, id);
+    // reading a batch is always allowed; any change only while its page is live
+    const bt = await batchFor(req, res, id, req.method !== 'GET');
     if (!bt) return;
     if (req.method === 'GET' && !sub) {
       const seen = new Map();
@@ -803,6 +817,8 @@ export default async function handler(req, res) {
       if (mode === 'schedule' && !(at >= Date.now() + (MIN_LEAD_MIN - 2) * 60e3))
         return bad(res, `pick a time at least ${MIN_LEAD_MIN} minutes from now (posts are never sent straight away)`);
       const page = await getRecord('pages', bt.page);
+      const closed = notPublishable(page);                             // a live page, on its own SocialPilot account
+      if (closed) return bad(res, `not sent: ${closed}`, 409);
       // the editor's card, read before anything is saved: storage refusing reads answers 503 here,
       // never a security-check page sent to SocialPilot as the post's image
       const img = await fetchBlob(x.final_image_url);

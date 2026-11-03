@@ -22,9 +22,9 @@ export async function publish(draft) {
   if (mode === 'dry_run') return { mode, ok: true, note: 'dry run: nothing was sent' };
   if (mode === 'webhook') {
     if (!process.env.PUBLISH_WEBHOOK_URL) throw new Error('PUBLISH_WEBHOOK_URL is not set');
-    const accounts = JSON.parse(process.env.SOCIALPILOT_ACCOUNTS || '{}');
+    // the page's own account, linked by the onboarding routine (routes/publish.js read it from the live page)
     const r = await fetch(process.env.PUBLISH_WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ draft_id: draft.id, page: draft.page, page_name: draft.page_name, socialpilot_account: accounts[draft.page] || '',
+      body: JSON.stringify({ draft_id: draft.id, page: draft.page, page_name: draft.page_name, socialpilot_account: draft.socialpilot_login_id || '',
         caption: draft.caption_final || draft.caption, image_url: draft.image_url,
         image_urls: [draft.image_url, ...(draft.extra_images || [])] }) });
     const text = await r.text();

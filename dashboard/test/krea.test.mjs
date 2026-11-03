@@ -7,8 +7,16 @@ import { getRecord, putRecord } from '../lib/db.js';
 
 const R = { routine: true };
 const robot = client();
+// Every image is a page's too (premium_per_day). The tests of the month's count spread their asks
+// over many live pages with the most a page may have, so only the product-wide count is in play.
+const POOL = Array.from({ length: 60 }, (_, i) => `krea-demo-${i + 1}`);
+let turn = 0;
+const pooled = () => POOL[turn++ % POOL.length];
+test.before(async () => {
+  for (const slug of POOL) await putRecord('pages', slug, { slug, name: slug, workspace: null, status: 'live', premium_per_day: 40 });
+});
 // as the routine sends it: a reservation says it will be confirmed (an older routine's does not)
-const ask = body => robot.call('POST', '/api/routine/krea', { confirms: true, ...body }, R);
+const ask = body => robot.call('POST', '/api/routine/krea', { confirms: true, page: pooled(), ...body }, R);
 const realNow = Date.now;
 const stamp = (t = Date.now()) => ({ month: new Date(t).toISOString().slice(0, 7), day: new Date(t).toISOString().slice(0, 10) });
 const daysLeftOf = (t = Date.now()) => { const n = new Date(t); return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth() + 1, 0)).getUTCDate() - n.getUTCDate() + 1; };
@@ -244,7 +252,7 @@ test('a Studio session on an older routine (it never confirms) has its images co
     await fresh(t);
     const cap = 100 * daysLeftOf(t);
     await ask({ ...hourly(10, 0, stamp(t)), report_only: true, cap });
-    await robot.call('POST', '/api/routine/krea', { who: 'studio', cap, key: 'old' }, R);
+    await robot.call('POST', '/api/routine/krea', { who: 'studio', cap, key: 'old', page: pooled() }, R);
     await ask({ who: 'studio', cap, key: 'new' });                   // a newer session, never made
     later(46 * 60e3);
     const r = await ask({ ...hourly(10, 0, stamp(t)), report_only: true, cap });
@@ -277,3 +285,49 @@ test('a routine older than this count (its ledger without the month) is refused:
   assert.equal((await getRecord('krea', stamp().month)).res.length, 0);
 });
 
+
+test('a page makes at most its premium cards a day, whoever asks; the month\'s cap stays product-wide', async () => {
+  await fresh();
+  const cap = 1000 * daysLeftOf();
+  await ask({ ...hourly(0, 0), report_only: true, cap });
+  await putRecord('workspaces', 'krea-ws', { id: 'krea-ws', name: 'Krea Workspace', limits: { premium_per_day: 3 } });
+  await putRecord('pages', 'krea-small', { slug: 'krea-small', name: 'Krea Small', workspace: 'krea-ws', status: 'live', premium_per_day: 2 });
+  await putRecord('pages', 'krea-capped', { slug: 'krea-capped', name: 'Krea Capped', workspace: 'krea-ws', status: 'live', premium_per_day: 6 });
+  const one = (page, extra = {}) => ask({ who: 'studio', cap, page, ...extra });
+  assert.deepEqual([(await one('krea-small')).status, (await one('krea-small', { who: 'hourly' })).status], [200, 200]);
+  let r = await one('krea-small');
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error, 'KREA PACE: 2/2 images today for krea-small');
+  assert.equal((await one('krea-small', { key: 'again' })).status, 409, 'a new key is a new image: still refused');
+  // the workspace's most (3, the product owner's) is lower than the page's own 6
+  for (let i = 0; i < 3; i++) assert.equal((await one('krea-capped')).status, 200);
+  assert.match((await one('krea-capped')).body.error, /^KREA PACE: 3\/3 images today for krea-capped/);
+  assert.equal((await one(pooled())).status, 200, 'another page still has its own');
+  // the same ask again (its answer lost) keeps its reservation, even once the page has used its day
+  await putRecord('pages', 'krea-one', { slug: 'krea-one', name: 'Krea One', status: 'live', premium_per_day: 1 });
+  assert.equal((await one('krea-one', { key: 'k-1' })).status, 200);
+  assert.equal((await one('krea-one', { key: 'k-1' })).body.again, true);
+  // asked without a page, for a page that does not exist or is not live: refused, never counted
+  assert.equal((await robot.call('POST', '/api/routine/krea', { who: 'studio', cap, confirms: true }, R)).status, 400);
+  assert.equal((await one('no-such-page')).status, 404);
+  for (const status of ['paused', 'draft', 'failed']) {
+    await putRecord('pages', 'krea-off', { slug: 'krea-off', name: 'Krea Off', status, premium_per_day: 6 });
+    r = await one('krea-off');
+    assert.equal(r.status, 409, status);
+    assert.match(r.body.error, /^KREA PACE: krea-off is/);
+  }
+  // a report and a "made" need no page: they reserve nothing
+  assert.equal((await robot.call('POST', '/api/routine/krea', { ...hourly(1, 1), report_only: true, cap }, R)).status, 200);
+  assert.equal((await robot.call('POST', '/api/routine/krea', { who: 'studio', cap, key: 'k-1', made: true }, R)).status, 200);
+});
+
+test('two sessions never both take a page\'s last premium card of the day', async () => {
+  await fresh();
+  const cap = 1000 * daysLeftOf();
+  await ask({ ...hourly(0, 0), report_only: true, cap });
+  await putRecord('pages', 'krea-race', { slug: 'krea-race', name: 'Krea Race', status: 'live', premium_per_day: 1 });
+  const answers = await Promise.all(Array.from({ length: 6 }, (_, i) => ask({ who: i % 2 ? 'studio' : 'hourly', cap, page: 'krea-race', key: `r${i}` })));
+  assert.deepEqual(answers.map(a => a.status).sort(), [200, 409, 409, 409, 409, 409]);
+  const rec = await getRecord('krea', stamp().month);
+  assert.equal(rec.res.filter(x => x.page === 'krea-race').length, 1);
+});

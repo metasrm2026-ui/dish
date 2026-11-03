@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { client, remote } from './helpers.mjs';
+import { client, remote, makeLive, workspace, livePage } from './helpers.mjs';
 import { readFileSync } from 'node:fs';
 
 const R = { routine: true };
@@ -15,7 +15,7 @@ async function setPassword(c, link, pw) {
 test('phase 1 workflow end to end', async () => {
   const admin = client(), editor = client(), other = client(), robot = client();
 
-  // nothing without a session; routine bootstrap creates the first admin once
+  // nothing without a session; routine bootstrap creates the first user, the product owner, once
   assert.equal((await admin.call('GET', '/api/studio/pages')).status, 401);
   assert.equal((await admin.call('GET', '/api/drafts?status=pending')).status, 401);
   const boot = await robot.call('POST', '/api/routine/bootstrap', { email: 'Owner@Example.com', name: 'Owner' }, R);
@@ -25,13 +25,15 @@ test('phase 1 workflow end to end', async () => {
   assert.equal((await setPassword(admin, boot.body.setup_link, 'correct horse 42')).status, 200);
   assert.equal((await setPassword(other, boot.body.setup_link, 'another pass 42')).status, 400, 'link works once');
   const me = await admin.call('GET', '/api/auth/me');
-  assert.equal(me.body.user.role, 'admin');
+  assert.equal(me.body.user.role, 'super');
 
-  // admin: a page, sources, a reference document
-  const pg = await admin.call('POST', '/api/admin/pages', { name: 'Dummy Sports', fb_page_id: '123', socialpilot_login_id: '999', theme: { accent: '#ff0' } });
+  // the product owner: a tester's workspace, a page in it, sources, a reference document
+  const WS = (await workspace(admin)).id;
+  const pg = await admin.call('POST', '/api/admin/pages', { name: 'Dummy Sports', fb_page_id: '123', workspace: WS, theme: { accent: '#ff0' } });
   assert.equal(pg.status, 200);
   const slug = pg.body.page.slug;
   assert.equal(slug, 'dummy-sports');
+  await makeLive(slug, '999');                    // as the onboarding routine leaves it (onboard.test.mjs)
   await admin.call('POST', `/api/admin/pages/${slug}/sources`, { url: 'https://example.com/news', type: 'website', label: 'Example' });
   assert.equal((await admin.call('POST', `/api/admin/pages/${slug}/sources`, { url: 'not a url', type: 'website' })).status, 400);
   const srch = await admin.call('POST', `/api/admin/pages/${slug}/sources`, { url: 'dummy league news today', type: 'search' });
@@ -65,7 +67,7 @@ test('phase 1 workflow end to end', async () => {
   assert.equal(Buffer.from(doc.body).subarray(0, 5).toString(), '%PDF-');
 
   // invite an editor for this page
-  const inv = await admin.call('POST', '/api/admin/users', { email: 'ed@example.com', role: 'editor', pages: [slug] });
+  const inv = await admin.call('POST', '/api/admin/users', { email: 'ed@example.com', role: 'editor', workspace: WS, pages: [slug] });
   assert.equal(inv.status, 200);
   const sp = await setPassword(editor, inv.body.setup_link, 'editor pass 77');
   assert.equal(sp.status, 200, JSON.stringify(sp.body));
@@ -201,7 +203,7 @@ test('phase 1 workflow end to end', async () => {
   // audit + usage logs
   await robot.call('POST', '/api/routine/usage', { entries: [{ tool: 'krea', page: slug, user: 'ed@example.com', units: 15, unit: 'credits' }] }, R);
   const audit = (await admin.call('GET', '/api/admin/audit')).body.entries.map(e => e.action);
-  for (const a of ['bootstrap_admin', 'reference_uploaded', 'reference_rolled_back', 'sources_viewed', 'config_read', 'reference_read', 'user_invited', 'post_scheduled', 'post_now'])
+  for (const a of ['bootstrap_super', 'reference_uploaded', 'reference_rolled_back', 'sources_viewed', 'config_read', 'reference_read', 'user_invited', 'post_scheduled', 'post_now'])
     assert.ok(audit.includes(a), `audit has ${a}`);
   assert.equal((await admin.call('GET', '/api/admin/usage')).body.entries[0].tool, 'krea');
 });
@@ -218,7 +220,7 @@ test('lockout after five wrong passwords; deactivation ends sessions', async () 
   const users = (await admin.call('GET', '/api/admin/users')).body.users;
   const ed = users.find(u => u.email === 'ed@example.com');
   assert.equal(ed.locked, true);
-  assert.equal((await admin.call('PATCH', `/api/admin/users/${users.find(u => u.role === 'admin').id}`, { role: 'editor' })).status, 400);
+  assert.equal((await admin.call('PATCH', `/api/admin/users/${users.find(u => u.role === 'super').id}`, { role: 'editor' })).status, 400);
 });
 
 test('two publisher runs cannot both schedule one approved draft', async () => {
@@ -678,7 +680,7 @@ test('publisher: a result is taken only after the step before it', async () => {
   }
   assert.equal((await report(ids[0], 'failed', { error: 'x' })).status, 409, 'a pending draft never failed to publish');
   assert.equal((await report(ids[3], 'publishing', { scheduled_for: '2026-10-21T09:00:00Z' })).status, 200); await tick();
-  assert.equal((await report(ids[3], 'scheduled', { scheduled_for: '2026-10-21T09:00:00Z', post_id: 'cp-1', sp_post_id: 'sp-1', sp_login_id: 2662936 })).status, 200);
+  assert.equal((await report(ids[3], 'scheduled', { scheduled_for: '2026-10-21T09:00:00Z', post_id: 'cp-1', sp_post_id: 'sp-1', sp_login_id: 700001 })).status, 200);
   await tick();
   assert.equal((await report(ids[3], 'scheduled', { scheduled_for: '2026-10-21T09:05:00Z', post_id: 'cp-1' })).status, 200, 'scheduled again: corrected');
   await tick();
@@ -713,12 +715,12 @@ test('publisher: a run\'s breaker can hold a draft it failed; delivery misses co
   await saveDraft({ id: m, page: 'dummy-sports', page_name: 'Dummy', caption: 'm' }, tinyJpeg);
   await setStatus(m, 'approved', { caption: 'm' }); await tick();
   await report(m, 'publishing'); await tick();
-  await report(m, 'scheduled', { scheduled_for: new Date(Date.now() - 90 * 60e3).toISOString(), post_id: 'cp-9', sp_post_id: 'sp-q-9', sp_login_id: 2662936 });
+  await report(m, 'scheduled', { scheduled_for: new Date(Date.now() - 90 * 60e3).toISOString(), post_id: 'cp-9', sp_post_id: 'sp-q-9', sp_login_id: 700001 });
   const sch = (await robot.call('GET', '/api/queue', undefined, R)).body.scheduled.find(x => x.id === m);
-  assert.deepEqual([sch.sp_post_id, sch.sp_login_id, sch.caption_start], ['sp-q-9', 2662936, 'm'], 'what the delivery check looks it up with');
+  assert.deepEqual([sch.sp_post_id, sch.sp_login_id, sch.caption_start], ['sp-q-9', 700001, 'm'], 'what the delivery check looks it up with');
   assert.equal((await report(m, 'missing')).status, 409, 'not 2 hours past its time: SocialPilot may just be late');
   await tick();
-  await report(m, 'scheduled', { scheduled_for: new Date(Date.now() - 3 * 3600e3).toISOString(), post_id: 'cp-9', sp_post_id: 'sp-q-9', sp_login_id: 2662936 });
+  await report(m, 'scheduled', { scheduled_for: new Date(Date.now() - 3 * 3600e3).toISOString(), post_id: 'cp-9', sp_post_id: 'sp-q-9', sp_login_id: 700001 });
   assert.equal((await report(m, 'missing')).body.misses, 1);
   assert.equal((await report(m, 'missing')).body.misses, 1, 'the same run reporting again is not a second miss');
   const rec = await getRecord('health', 'delivery');
@@ -821,19 +823,19 @@ test('publisher: waking the routine never fails an approval; retry refuses super
   }
 });
 
-test('admin: a page\'s SocialPilot account is a loginId, never the blocked one', async () => {
+test('a page\'s SocialPilot account is never typed in: only the onboarding routine links it', async () => {
   const owner = client();
   assert.equal((await owner.call('POST', '/api/auth/login', { email: 'owner@example.com', password: 'correct horse 42' })).status, 200);
-  assert.equal((await owner.call('POST', '/api/admin/pages', { name: 'Name Login', socialpilot_login_id: 'Huddle Room' })).status, 400);
-  const blocked = await owner.call('POST', '/api/admin/pages', { name: 'Blocked Login', socialpilot_login_id: '2662937' });
-  assert.equal(blocked.status, 400);
-  assert.match(blocked.body.error, /never be used/);
-  const ok = await owner.call('POST', '/api/admin/pages', { name: 'Good Login', socialpilot_login_id: ' 2662999 ' });
-  assert.equal(ok.body.page.socialpilot_login_id, '2662999');
-  const slug = ok.body.page.slug;
-  assert.equal((await owner.call('PATCH', `/api/admin/pages/${slug}`, { socialpilot_login_id: '2662937' })).status, 400);
+  const WS = (await owner.call('GET', '/api/admin/workspaces')).body.workspaces[0].id;
+  const made = await owner.call('POST', '/api/admin/pages', { name: 'Typed Login', workspace: WS, socialpilot_login_id: '700002' });
+  assert.equal(made.status, 400);
+  assert.match(made.body.error, /linked by the onboarding routine/);
+  const slug = (await owner.call('POST', '/api/admin/pages', { name: 'Good Login', workspace: WS })).body.page.slug;
+  const r = await owner.call('PATCH', `/api/admin/pages/${slug}`, { socialpilot_login_id: '700002' });
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /linked by the onboarding routine/);
   assert.equal((await owner.call('PATCH', `/api/admin/pages/${slug}`, { name: 'Good Login 2' })).status, 200, 'other fields as before');
-  assert.equal((await owner.call('PATCH', `/api/admin/pages/${slug}`, { socialpilot_login_id: '' })).body.page.socialpilot_login_id, '', 'cleared');
+  assert.equal((await owner.call('GET', '/api/admin/pages')).body.pages.find(p => p.slug === slug).socialpilot_login_id, '');
 });
 
 test('publisher: one page\'s account or one lookup holds only that draft, never "SocialPilot is down"', async () => {
@@ -885,10 +887,10 @@ test('publisher: a copy on the wrong account keeps its red note through a retry'
   await saveDraft({ id: w, page: 'dummy-sports', page_name: 'Dummy', caption: 'w' }, tinyJpeg);
   await setStatus(w, 'approved', { caption: 'w' }); await tick();
   await report(w, 'publishing'); await tick();
-  // what `publish mark --status scheduled` sends when the queued copy is on Keaton Caleb
+  // what `publish mark --status scheduled` sends when the queued copy is on an account on the deny list
   await report(w, 'failed', { error: 'scheduled on the wrong SocialPilot account: delete it in SocialPilot, then retry',
-                              post_id: 'cp-w', sp_post_id: 'sp-w', sp_login_id: 2662937, copies: 1,
-                              needs_action: 'a copy is on the wrong SocialPilot account (Keaton Caleb, loginId 2662937): delete it in SocialPilot' });
+                              post_id: 'cp-w', sp_post_id: 'sp-w', sp_login_id: 900001, copies: 1,
+                              needs_action: 'a copy is on the wrong SocialPilot account (Other Account, loginId 900001): delete it in SocialPilot' });
   assert.match((await notes())[w].text, /wrong SocialPilot account/);
   const plain = await owner.call('POST', '/api/decide', { ids: [w], decision: 'retry' });
   assert.deepEqual([plain.body.retried, plain.body.refused], [0, [{ id: w, why: 'do what its red note says first' }]]);
@@ -954,6 +956,7 @@ test('publisher: a claim keeps 45 minutes from the page\'s other posts, whicheve
   const base = Math.ceil(Date.now() / 3600e3) * 3600e3 + 2 * 3600e3;
   const at = m => new Date(base + m * 60e3).toISOString();
   const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 's'].map(s => `dummy-slots-202610221200-slot-${s}`);
+  await livePage('dummy-slots');
   for (const id of ids) { await saveDraft({ id, page: 'dummy-slots', page_name: 'Slots', caption: id }, tinyJpeg); await setStatus(id, 'approved', { caption: id }); }
   await tick();
   // run A claimed a; run B, which planned a few seconds apart, asks 40 minutes from it: it plans again
@@ -1032,6 +1035,7 @@ test('publisher: a resent draft waits while the draft it was resent from is bein
   const report = (id, status, extra = {}) => robot.call('POST', '/api/result', { id, status, ...extra }, R);
   const later = h => new Date(Math.ceil(Date.now() / 3600e3) * 3600e3 + h * 3600e3).toISOString();
   const o = 'dummy-wait-202610221400-studio-wt1', n = 'dummy-wait-202610221410-studio-wt1';
+  await livePage('dummy-wait');
   const studio = { batch: 'bt-wait', post: 'wt1', user: 'ed@example.com' };
   await saveDraft({ id: o, page: 'dummy-wait', page_name: 'Dummy', caption: 'Routine caption', studio }, tinyJpeg);
   await putRecord('batches', 'bt-wait', { id: 'bt-wait', page: 'dummy-wait', posts: [{ id: 'wt1', publish: { draft_id: o, state: 'failed' } }] });
