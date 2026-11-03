@@ -23,12 +23,12 @@ FAKES = {
         '  cp public/version.json "$FAKE_OUT/version.json"; ls > "$FAKE_OUT/files"',
         '  [ -z "${DEPLOY_MOVES_ALIAS:-}" ] || touch "$FAKE_OUT/moved"',                           # a CLI that moves the address itself
         '  if [ -n "${NO_URL:-}" ]; then echo "Error: something new"',
-        '  elif [ -n "${BARE_URL:-}" ]; then printf "https://dish-xyz9.vercel.app"',        # run by hand, piped: no JSON
-        '  else echo \'{"deployment": {"url": "https://dish-abc.vercel.app"}}\'; fi ;;',
+        '  elif [ -n "${BARE_URL:-}" ]; then printf "https://metomate-xyz9.vercel.app"',        # run by hand, piped: no JSON
+        '  else echo \'{"deployment": {"url": "https://metomate-abc.vercel.app"}}\'; fi ;;',
         '*" alias ls "*) [ -z "${NO_ALIASES:-}" ] || exit 1',                                      # where the aliases point now
-        '  now=dish-old1.vercel.app; [ ! -e "$FAKE_OUT/moved" ] || now=dish-abc.vercel.app',
-        '  printf "%s\\n" "  source  url  age" "  dish-x.vercel.app  other.test  9d" "  $now  bore.test  2d" ;;',
-        '*" link "*) mkdir -p .vercel; echo \'{"projectId": "prj_1", "projectName": "dish"}\' > .vercel/project.json ;;',
+        '  now=metomate-old1.vercel.app; [ ! -e "$FAKE_OUT/moved" ] || now=metomate-abc.vercel.app',
+        '  printf "%s\\n" "  source  url  age" "  metomate-x.vercel.app  other.test  9d" "  $now  bore.test  2d" ;;',
+        '*" link "*) mkdir -p .vercel; echo \'{"projectId": "prj_1", "projectName": "metomate"}\' > .vercel/project.json ;;',
         '*" env ls "*) cat "$FAKE_ENV" 2>/dev/null ;;',                                           # the names the project has
         '*" env add "*) v="$(cat)"; set -- $*; echo "$5" >> "$FAKE_ENV"; echo "$5=$v" >> "$FAKE_OUT/env" ;;',
         '*" blob create-store "*) echo BLOB_READ_WRITE_TOKEN >> "$FAKE_ENV" ;;',
@@ -89,7 +89,7 @@ def test_a_clean_commit_is_tested_deployed_with_its_version_and_checked_live(rep
     log = repo["log"].read_text().splitlines()
     assert log[0] == "npm test", "the tests run before anything is deployed"
     assert any(x.startswith("npx -y vercel@65.0.0 deploy --prod") for x in log), "a pinned Vercel CLI"
-    assert any(x == "npx -y vercel@65.0.0 alias set https://dish-abc.vercel.app bore.test --token tok" for x in log)
+    assert any(x == "npx -y vercel@65.0.0 alias set https://metomate-abc.vercel.app bore.test --token tok" for x in log)
     assert any(x.startswith("curl -fsS https://bore.test/version.json") for x in log)
     assert json.loads((repo["out"] / "version.json").read_text()) == {"commit": repo["commit"], "api": 4}
     assert "test" not in (repo["out"] / "files").read_text().split(), "only what the site needs is deployed"
@@ -97,7 +97,7 @@ def test_a_clean_commit_is_tested_deployed_with_its_version_and_checked_live(rep
     # run by hand in a terminal (no agent): the CLI prints the bare deployment URL, no JSON
     p = _deploy(repo, BARE_URL="1")
     assert p.returncode == 0, p.stderr
-    assert "npx -y vercel@65.0.0 alias set https://dish-xyz9.vercel.app bore.test --token tok" in repo["log"].read_text()
+    assert "npx -y vercel@65.0.0 alias set https://metomate-xyz9.vercel.app bore.test --token tok" in repo["log"].read_text()
 
 
 def test_uncommitted_changes_failing_tests_a_missed_alias_and_an_old_live_copy_all_fail(repo):
@@ -125,8 +125,8 @@ def test_the_deployment_to_roll_back_to_is_printed_before_the_address_moves(repo
     repo["live"].write_text(json.dumps({"commit": repo["commit"], "api": 4}, separators=(",", ":")))
     p = _deploy(repo)
     assert p.returncode == 0, p.stderr
-    assert "deploy: bore.test pointed at https://dish-old1.vercel.app before this deploy" in p.stdout
-    assert "npx -y vercel@65.0.0 alias set https://dish-old1.vercel.app bore.test --token $VERCEL_TOKEN" in p.stdout
+    assert "deploy: bore.test pointed at https://metomate-old1.vercel.app before this deploy" in p.stdout
+    assert "npx -y vercel@65.0.0 alias set https://metomate-old1.vercel.app bore.test --token $VERCEL_TOKEN" in p.stdout
     log = repo["log"].read_text().splitlines()
     deployed = next(i for i, x in enumerate(log) if " deploy " in x)
     assert log.index("npx -y vercel@65.0.0 alias ls --token tok") < deployed < next(i for i, x in enumerate(log) if " alias set " in x)
@@ -134,7 +134,7 @@ def test_the_deployment_to_roll_back_to_is_printed_before_the_address_moves(repo
     # old deployment, not the new one (a rollback to that would change nothing)
     p = _deploy(repo, DEPLOY_MOVES_ALIAS="1")
     assert p.returncode == 0 and (repo["out"] / "moved").exists(), p.stderr
-    assert "deploy: bore.test pointed at https://dish-old1.vercel.app before this deploy" in p.stdout
+    assert "deploy: bore.test pointed at https://metomate-old1.vercel.app before this deploy" in p.stdout
     p = _deploy(repo, NO_ALIASES="1")
     assert p.returncode == 0 and "could not tell which deployment bore.test points at now" in p.stderr
 
@@ -146,13 +146,13 @@ def test_only_the_products_own_project_at_the_address_it_is_given(repo):
     assert p.returncode != 0 and "set DASHBOARD_ALIAS" in p.stderr and repo["log"].read_text() == "", "no default address"
     (repo["dash"] / ".vercel" / "project.json").write_text('{"projectId": "prj_9", "projectName": "some-other-app"}')
     p = _deploy(repo)
-    assert p.returncode == 1 and "linked to the Vercel project some-other-app, not dish" in p.stderr
+    assert p.returncode == 1 and "linked to the Vercel project some-other-app, not metomate" in p.stderr
     assert "npx" not in repo["log"].read_text(), "nothing deployed to another project"
     (repo["dash"] / ".vercel" / "project.json").unlink()
     p = _deploy(repo, VERCEL_SCOPE="demo-team")
     assert p.returncode == 0, p.stderr
     log = repo["log"].read_text()
-    assert "npx -y vercel@65.0.0 link --yes --project dish --scope demo-team --token tok" in log
+    assert "npx -y vercel@65.0.0 link --yes --project metomate --scope demo-team --token tok" in log
     assert "deploy --prod --yes --scope demo-team --token tok" in log
 
 
@@ -167,8 +167,8 @@ def test_setup_creates_the_project_storage_and_keys_deploys_and_prints_the_set_p
     p = _setup(repo)
     assert p.returncode == 0, p.stderr
     log = repo["log"].read_text().splitlines()
-    assert "npx -y vercel@65.0.0 project add dish --token tok" in log
-    assert "npx -y vercel@65.0.0 blob create-store dish-blob --access public --yes --environment production " \
+    assert "npx -y vercel@65.0.0 project add metomate --token tok" in log
+    assert "npx -y vercel@65.0.0 blob create-store metomate-blob --access public --yes --environment production " \
            "--environment preview --environment development --token tok" in log
     added = dict(x.split("=", 1) for x in (repo["out"] / "env").read_text().splitlines())
     assert set(added) == {"DATA_KEY", "SESSION_SECRET", "ROUTINE_SECRET"}

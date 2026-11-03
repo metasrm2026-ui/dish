@@ -1,4 +1,4 @@
-// Dish: sign-in, the owners' pages (connect, documents, Go live, the onboarding's progress),
+// Metomate: sign-in, the owners' pages (connect, documents, Go live, the onboarding's progress),
 // their editors, page selection, Post Studio's steps (topics -> ideas -> visual -> caption -> check ->
 // post), the templates and the product owner's admin panel. Plain JS, hash routes, server state only (no secrets,
 // prompts or reference documents ever reach the browser).
@@ -124,7 +124,7 @@ function fileToB64(file, maxSide = 2000) {
 }
 
 // ------------------------------------------------------------------ header
-const BRAND = '<a class="brand" href="#/"><span class="mark" aria-hidden="true"></span>Dish</a>';
+const BRAND = '<a class="brand" href="#/"><span class="mark" aria-hidden="true"></span>Metomate</a>';
 const ROLE_NAME = { super: 'product owner', owner: 'owner', editor: 'editor' };
 function header() {
   const u = S.me && S.me.user;
@@ -1781,7 +1781,7 @@ const addsPages = () => !!(S.me && S.me.user.workspace && ['owner', 'super'].inc
 const home = () => (addsPages() && !S.pages.length ? '/pages' : '/studio');
 const pageUrl = (slug, more = '') => `/api/pages/${encodeURIComponent(slug)}${more}`;
 const firstPage = () => `<div class="hero panel" id="firstpage"><h2>Connect your first page</h2>
-    <div class="muted">Four short steps, then Dish makes posts for your Facebook page every hour. Nothing is published until one of your editors approves it.</div>
+    <div class="muted">Four short steps, then Metomate makes posts for your Facebook page every hour. Nothing is published until one of your editors approves it.</div>
     <ol class="howto"><li><b>Page details</b>: its name, Facebook address, niche, language and time zone.</li>
       <li><b>Connect in SocialPilot</b>: add the page there, so approved posts can be scheduled.</li>
       <li><b>Upload documents</b>: your post templates, visual references and caption tone.</li>

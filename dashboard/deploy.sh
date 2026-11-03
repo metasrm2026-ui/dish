@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Deploy Dish's dashboard to its own Vercel project (dish), and check that its public
-# address (DASHBOARD_ALIAS, e.g. dish-studio.vercel.app or the product's own domain) then serves it.
+# Deploy Metomate's dashboard to its own Vercel project (metomate), and check that its public
+# address (DASHBOARD_ALIAS, e.g. metomate-studio.vercel.app or the product's own domain) then serves it.
 # The routines run the Python of the latest push; the dashboard runs whatever was deployed last, so
 # a deploy must be a known commit and be checked:
 #   1. refuses uncommitted changes in dashboard/ (what is deployed is a commit, nothing else)
@@ -11,13 +11,13 @@
 #      to: README, "Rolling back"), then points it at the new one, with a pinned Vercel CLI
 #   5. fails unless that address now serves version.json with this commit
 # Needs VERCEL_TOKEN and DASHBOARD_ALIAS (VERCEL_SCOPE: the Vercel team, if any). The folder is linked
-# to the dish project (and refused when linked to any other). Deploy before pushing Python that
+# to the metomate project (and refused when linked to any other). Deploy before pushing Python that
 # needs the new API. First time: scripts/setup-vercel.sh creates the project, its storage and settings.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 API_LEVEL=4                       # raise it when the Python starts depending on a new endpoint (4: onboarding)
 VERCEL=vercel@65.0.0              # pinned, bumped on purpose: a newer CLI once stopped moving the alias
-PROJECT=dish                      # this product's own Vercel project, never another deployment's
+PROJECT=metomate                      # this product's own Vercel project, never another deployment's
 host="${DASHBOARD_ALIAS:?set DASHBOARD_ALIAS to the address of the dashboard, e.g. $PROJECT.vercel.app}"
 scope=(); [ -z "${VERCEL_SCOPE:-}" ] || scope=(--scope "$VERCEL_SCOPE")
 cd "$here"

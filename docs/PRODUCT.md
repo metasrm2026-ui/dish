@@ -1,4 +1,4 @@
-# Dish: the plug-and-play product
+# Metomate: the plug-and-play product
 
 A separate product built from the Bore engine. Anyone the owner invites can connect a Facebook page,
 upload the page's three reference documents (post templates, visual references, caption language and

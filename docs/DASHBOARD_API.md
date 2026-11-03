@@ -1,4 +1,4 @@
-# The dashboard's API (Dish)
+# The dashboard's API (Metomate)
 
 What the screens and the routines rely on: the records, who may see what, and every route the
 product added to Bore's (docs/PRODUCT.md is the specification). Every route is `/api/<route>`,

@@ -252,3 +252,29 @@ def test_prepare_stops_when_the_card_browser_does_not_start(monkeypatch, tmp_pat
     monkeypatch.setattr(studio, "prepare_feed", lambda *a, **k: (_ for _ in ()).throw(Stop()))
     with pytest.raises(Stop):
         routine(["studio", "feed", "--run", str(tmp_path / "run")], Dash())
+
+
+def test_the_first_run_of_a_new_product_starts_a_new_database(monkeypatch, tmp_path):
+    """Nothing was ever saved (the dashboard says never_saved): the first hourly run makes a new
+    database, and its push is allowed (there is nothing to lose). A 404 without it still stops."""
+    db = tmp_path / "data" / "bore.db"
+    d, calls = answering(monkeypatch, Resp(404, b'{"error":"no state yet","never_saved":true}'))
+    out = d.pull_state(db, waits=())
+    assert "first run" in out and len(calls) == 1
+    assert D.restored(db)["new"] is True and db.is_file()
+    st = Store(db)
+    st.log_run("routine-prepare", time.time(), "ok")
+    st.commit()
+    st.db.close()
+    puts = []
+    monkeypatch.setattr(d.s, "put", lambda url, **k: puts.append(url) or Resp(200, b"{}"))
+    assert "saved state" in d.push_state(db)
+    assert puts
+
+
+def test_a_404_after_state_was_saved_never_starts_over(monkeypatch, tmp_path):
+    db = tmp_path / "bore.db"
+    d, _ = answering(monkeypatch, Resp(404, b'{"error":"no state yet"}'))
+    with pytest.raises(D.StateError, match="no saved state"):
+        d.pull_state(db, waits=())
+    assert not db.exists() and D.restored(db) is None

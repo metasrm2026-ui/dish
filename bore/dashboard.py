@@ -18,7 +18,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .config import load_env, load_pages
-from .store import check_file
+from .store import Store, check_file
 
 RETRY_BACKOFF = 1.0      # seconds: after a cut connection retries wait 0, 2, 4, 8 s; after a busy reply 3-4, then 6-7 s
 RETRY_AFTER_MAX = 30     # seconds: the longest Retry-After waited for (a run has its own time budget)
@@ -280,6 +280,16 @@ class Dashboard:
                 why = " ".join(f"{type(e).__name__}: {e}".split())[:300]
                 continue
             if r.status_code == 404:
+                try:
+                    never = json.loads(r.text or "{}").get("never_saved") is True
+                except (ValueError, AttributeError):
+                    never = False
+                if never:     # the product's very first hourly run: nothing was ever saved to lose
+                    path.unlink(missing_ok=True)
+                    Store(path).db.close()
+                    _check, counts = check_file(path)
+                    marker.write_text(json.dumps({"at": time.time(), "bytes": 0, "counts": counts, "new": True}))
+                    return f"no state saved yet (first run): started a new database at {path}"
                 raise StateError("the dashboard has no saved state (404). Only on the very first run, "
                                  "when the owner says so, carry on with --fresh")
             if r.status_code in (401, 403):      # a wrong secret or a security check: trying again won't help

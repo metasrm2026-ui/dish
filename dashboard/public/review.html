@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Approvals · Dish</title>
+<title>Approvals · Metomate</title>
 <meta name="theme-color" content="#ffffff">
 <style>
-/* Dish's look (docs/PRODUCT.md "The look", as dashboard/public/app.css): white, dark green text, a calm green accent */
+/* Metomate's look (docs/PRODUCT.md "The look", as dashboard/public/app.css): white, dark green text, a calm green accent */
 :root { --bg:#ffffff; --panel:#ffffff; --ink:#0f3d2e; --muted:#5a7366; --line:#d9e6de; --soft:#f1f7f3;
   --ok:#17784a; --ok-bg:#e2f3e9; --no:#b42318; --no-bg:#fdecea; --warn:#8a5a00; --warn-bg:#fdf3d8; --focus:#1f7a52; --accent-soft:#e4f2ea;
   --shadow:0 1px 2px rgba(15,61,46,.06), 0 4px 14px rgba(15,61,46,.05); color-scheme:light; }
@@ -540,7 +540,7 @@ function render() {
   if (drawn !== drawnIds) { if (drawnIds && drawn) drawnAt = performance.now(); drawnIds = drawn; }
   const f = document.activeElement, fp = f && f.matches('.post textarea, .post input[type=text]') ? f.closest('.post').dataset.id : null,
         fsel = fp && (f.classList.contains('fbtext') ? '.fbtext' : f.classList.contains('why-note') ? '.why-note' : '.side > textarea');
-  $('#app').innerHTML = `<header>${newer}<div class="brandbar"><div class="bar"><a class="brand" href="/#/"><span class="mark" aria-hidden="true"></span>Dish</a>
+  $('#app').innerHTML = `<header>${newer}<div class="brandbar"><div class="bar"><a class="brand" href="/#/"><span class="mark" aria-hidden="true"></span>Metomate</a>
       <a class="back" href="/#/studio">← Back to Studio</a></div></div><div class="bar"><h1>Hourly posts: approvals</h1>
     <div class="tabs">${[['pending','Waiting'],['regenerate','Regenerating'],['approved','Queued'],['scheduled','Scheduled'],['posted','Posted'],['rejected','Not okay'],['failed','Failed'],['cleared','Cleared'],['all','All']].map(([t, l]) =>
       `<button class="${t === tab ? 'on' : ''}" onclick="tab='${t}';focusIdx=0;load()">${l}${counts[t] ? `<span class="n">${counts[t]}</span>` : ''}</button>`).join('')}</div>

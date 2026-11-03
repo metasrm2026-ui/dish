@@ -18,7 +18,7 @@ const ROUTES = {
   auth: () => import('../routes/auth.js'), admin: () => import('../routes/admin.js'),
   studio: () => import('../routes/studio.js'), routine: () => import('../routes/routine.js'),
   health: () => import('../routes/health.js'), templates: () => import('../routes/templates.js'),
-  // Dish: owners' pages (Go live, pause) and their workspace (editors)
+  // Metomate: owners' pages (Go live, pause) and their workspace (editors)
   pages: () => import('../routes/pages.js'), workspace: () => import('../routes/workspace.js'),
 };
 

@@ -1,5 +1,7 @@
 {
   "functions": { "api/main.js": { "maxDuration": 60, "includeFiles": "config/socialpilot.yaml" } },
+  "redirects": [{ "source": "/((?!api/).*)", "has": [{ "type": "host", "value": "dish-studio.vercel.app" }],
+    "destination": "https://metomate.vercel.app/$1", "permanent": false }],
   "rewrites": [{ "source": "/api/:path*", "destination": "/api/main?route=:path*" }],
   "headers": [{ "source": "/(index.html|review.html|app.js|app.css|version.json)?", "headers": [
     { "key": "Cache-Control", "value": "no-cache" } ] },

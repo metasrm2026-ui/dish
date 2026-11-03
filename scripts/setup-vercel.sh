@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Set up Dish's own Vercel project from nothing, once (README "Deploy"), then deploy it and
+# Set up Metomate's own Vercel project from nothing, once (README "Deploy"), then deploy it and
 # create the super user:
-#   1. the project dish (created when missing), and dashboard/ linked to it
+#   1. the project metomate (created when missing), and dashboard/ linked to it
 #   2. a Blob store (public access, as the dashboard stores encrypted data), connected to the project:
 #      it sets BLOB_READ_WRITE_TOKEN. Skipped when the project already has one.
 #   3. the settings it generates: DATA_KEY (32 bytes, base64: the key every stored record is encrypted
@@ -18,7 +18,7 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 VERCEL=vercel@65.0.0              # the same pinned CLI as dashboard/deploy.sh
-PROJECT=dish
+PROJECT=metomate
 STORE="$PROJECT-blob"
 FIRES=(ROUTINE_FIRE STUDIO_FIRE ONBOARD_FIRE)
 : "${VERCEL_TOKEN:?set VERCEL_TOKEN}"
