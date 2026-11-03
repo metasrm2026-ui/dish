@@ -7,12 +7,12 @@
 # The API-triggered ones are fired by the dashboard: its <fire>_URL / <fire>_TOKEN Vercel variables
 # hold the trigger's fire URL and token (scripts/setup-vercel.sh leaves them for the owner).
 repository: metasrm2026-ui/dish
-environment: env_01Y5isNPRHkmR9Gbd3XoFYgv              # the cloud environment (shared: Dish's variables are DISH_*)
+environment: null                               # the product's own cloud environment (its env_... id)
 branch: main
 secrets: [DASHBOARD_URL, ROUTINE_SECRET, APIFY_TOKEN]   # names only: the values live in the environment's secrets
 triggers:
   hourly:
-    id: trig_01QhPzhRFYsqBu1mLYdA3cfm
+    id: null
     schedule: "15 * * * *"                      # posts for every live page, within its budget
     fire: null
     model: claude-sonnet-5
@@ -20,7 +20,7 @@ triggers:
     prompt: routines/hourly.prompt.md
     doc: ROUTINE.md
   publisher:
-    id: trig_01J9woGQWvAax5BXAKiPJQQR
+    id: null
     schedule: "40 * * * *"                      # and fired by the dashboard on each approval
     fire: ROUTINE_FIRE
     model: claude-sonnet-4-6
@@ -28,7 +28,7 @@ triggers:
     prompt: routines/publisher.prompt.md
     doc: PUBLISH.md
   topics:
-    id: trig_013nEA4z2zL2zf9did84jBEU
+    id: null
     schedule: "50 * * * *"                      # the Studio story feed
     fire: null
     model: claude-sonnet-5
@@ -36,7 +36,7 @@ triggers:
     prompt: routines/topics.prompt.md
     doc: TOPICS.md
   studio:
-    id: trig_013jFrYAoFN6vad4zyXvZHSH
+    id: null
     schedule: null                              # fired by the dashboard on each editor click and by the watchdog
     fire: STUDIO_FIRE
     model: claude-sonnet-5
@@ -44,7 +44,7 @@ triggers:
     prompt: routines/studio.prompt.md
     doc: STUDIO.md
   onboarding:
-    id: trig_01BwvRsVWQLJyHMophRwWbwE
+    id: null
     schedule: null                              # fired by the dashboard when a tester presses Go live
     fire: ONBOARD_FIRE
     model: claude-sonnet-5
