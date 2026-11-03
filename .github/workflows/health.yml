@@ -1,0 +1,80 @@
+# The pipeline's health, checked every hour from outside the routines (a routine that dies cannot
+# say so): restarts or fails stalled Studio jobs (POST /api/routine/watchdog, which answers with the
+# health status worked out then; GET /api/routine/health only when it gave none), and keeps one
+# issue "Bore health: RED" open while something is broken. GitHub emails new issues and comments to
+# the repository owner. Red opens it at once, amber after 3 checks in a row; green closes it. The
+# issue carries reason codes and ids only: the texts stay on the dashboard (review page banner,
+# admin Health tab).
+# Owner, once: repository Settings > Secrets and variables > Actions > New repository secret
+# BORE_ROUTINE_SECRET = the dashboard's ROUTINE_SECRET (optional variable BORE_DASHBOARD_URL).
+name: health
+on:
+  schedule:
+    - cron: "17 * * * *"                 # between the routines' :05, :25 and :35
+  workflow_dispatch: {}
+permissions:
+  issues: write
+  contents: read
+concurrency:
+  group: bore-health
+  cancel-in-progress: false
+jobs:
+  health:
+    runs-on: ubuntu-24.04             # pinned: a moving "latest" image changes under the workflow (26.04, Oct 2026)
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          SECRET: ${{ secrets.BORE_ROUTINE_SECRET }}
+          DASHBOARD: ${{ vars.BORE_DASHBOARD_URL || 'https://bore-dashboard.vercel.app' }}
+        with:
+          script: |
+            const secret = process.env.SECRET, base = process.env.DASHBOARD.replace(/\/+$/, '');
+            if (!secret) {
+              core.notice('BORE_ROUTINE_SECRET is not set: add it (Settings > Secrets and variables > Actions) to turn the health check on.');
+              return;
+            }
+            async function call(method, path) {
+              try {
+                const r = await fetch(base + path, { method, signal: AbortSignal.timeout(55000),
+                  headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' }, body: method === 'POST' ? '{}' : undefined });
+                const j = await r.json().catch(() => ({}));
+                return r.ok ? j : { error: `HTTP ${r.status}` };
+              } catch (e) { return { error: e.name }; }
+            }
+            const wd = await call('POST', '/api/routine/watchdog');
+            // the watchdog's status was worked out just now; the stored one only when it gave none (an
+            // instance that cannot read storage answers with what it knew before)
+            const valid = x => !!x && ['green', 'amber', 'red'].includes(x.status);
+            const h = valid(wd.health) ? wd.health : await call('GET', '/api/routine/health');
+            let status = h.status, reasons = h.reasons || [];
+            if (!['green', 'amber', 'red'].includes(status)) {     // what each call answered (HTTP 401: the secret is wrong)
+              status = 'red';
+              const ids = [h.error && `health: ${h.error}`, wd.error && `watchdog: ${wd.error}`].filter(Boolean);
+              reasons = [{ code: 'dashboard_unreachable', level: 'red', ids, since: Date.now() }];
+            }
+            const streak = Number(wd.streak) || 0;
+            core.info(`health ${status}: ${reasons.map(r => r.code).join(', ') || 'all good'}`
+                      + ` (watchdog: ${wd.error || `${wd.open_jobs} open job(s), ${streak} bad check(s) in a row`})`);
+            const { owner, repo } = context.repo;
+            const issues = await github.paginate(github.rest.issues.listForRepo, { owner, repo, state: 'open', per_page: 100 });
+            const issue = issues.find(i => !i.pull_request && i.title.startsWith('Bore health:'));
+            const title = `Bore health: ${status.toUpperCase()}`;
+            const body = [`Status **${status.toUpperCase()}**, checked ${new Date().toISOString()}.`, '',
+              ...reasons.map(r => `- ${r.level} \`${r.code}\`${r.since ? ` since ${new Date(r.since).toISOString()}` : ''}`
+                                  + `${(r.ids || []).length ? `: ${r.ids.map(x => `\`${x}\``).join(', ')}` : ''}`),
+              '', 'What each code means and what to do: README.md, "Operations". The details are on the dashboard (review page, admin Health tab).'].join('\n');
+            if (status === 'green') {
+              if (issue) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body: `Green again at ${new Date().toISOString()}.` });
+                await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: 'closed', state_reason: 'completed' });
+              }
+              return;
+            }
+            if (issue) {
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, title, body });
+              if (issue.title !== title)         // a change of status is a comment: GitHub emails it
+                await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body: `Now ${status.toUpperCase()}.` });
+            } else if (status === 'red' || streak >= 3) {
+              await github.rest.issues.create({ owner, repo, title, body });
+            }

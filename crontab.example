@@ -1,0 +1,5 @@
+# Hourly X collection, then health.
+5 * * * *  cd /path/to/Bore && python -m bore.cli collect >> data/collect.log 2>&1
+50 * * * * cd /path/to/Bore && python -m bore.cli health  >> data/health.log 2>&1
+# Twice-daily briefing: collect Reddit + web -> refresh X engagement -> cluster -> escalate -> PDF.
+30 11,21 * * * cd /path/to/Bore && python -m bore.cli brief >> data/brief.log 2>&1   # 07:30 / 17:30 ET in UTC

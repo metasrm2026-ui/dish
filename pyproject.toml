@@ -1,0 +1,21 @@
+[project]
+name = "bore"
+version = "0.1.0"
+description = "Sports social-media sourcing: collect, cluster, verify, brief"
+requires-python = ">=3.10"
+dependencies = ["requests>=2.31", "PyYAML>=6.0", "openpyxl>=3.1", "reportlab>=4.0"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+
+[project.scripts]
+bore = "bore.cli:main"
+
+[tool.setuptools]
+packages = ["bore"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# a deprecation in our own code fails the tests now, not on the day the library removes it
+# (Pillow 14 drops Image.getdata on 2027-10-15: the feed would have silently lost every photo)
+filterwarnings = ["error::DeprecationWarning:bore"]

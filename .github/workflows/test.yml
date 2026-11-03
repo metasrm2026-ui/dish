@@ -1,0 +1,58 @@
+# The tests on every push to the routines' branch and on every pull request: a red mark within
+# minutes when a push breaks something (the routines run that branch's latest push in their next
+# session, with no other check). Other branches are tested by their pull request: the repository is
+# private and its free Actions minutes also run the hourly health check (health.yml).
+name: tests
+on:
+  push:
+    branches: [claude/sleepy-cray-a7pcek]      # the routines' branch (routines/triggers.yaml)
+  pull_request:
+permissions:
+  contents: read
+concurrency:                                     # a newer push replaces a run still going
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  python:
+    runs-on: ubuntu-24.04             # pinned: ubuntu-latest moved to 26.04 (Oct 2026) and playwright 1.56 cannot install Chromium there
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"          # the routines' Python
+          cache: pip
+      - name: Packages (the tested versions, when constraints.txt is there)
+        run: python -m pip install --disable-pip-version-check -r requirements.txt $([ -f constraints.txt ] && echo "-c constraints.txt")
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('requirements.txt', 'constraints.txt') }}
+      - name: Chromium for the card and page tests, libGL for OpenCV
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libgl1
+          python -m playwright install --with-deps chromium
+      # the dashboard's packages: the test of bore/ops.py against the dev dashboard (the run-report
+      # contract) is skipped without them
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci --prefix dashboard
+      - run: python -m pytest -q
+  dashboard:
+    runs-on: ubuntu-24.04             # pinned: ubuntu-latest moved to 26.04 (Oct 2026) and playwright 1.56 cannot install Chromium there
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+      - run: npm test

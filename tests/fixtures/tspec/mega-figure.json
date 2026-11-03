@@ -1,0 +1,28 @@
+{
+  "id": "mega-figure",
+  "name": "Mega Figure",
+  "use_when": "A made-up test template: one large figure below a photo, a short line above it.",
+  "visual_lane": "ai_art",
+  "background": {"fill": "bg", "gradient": {"to": "accent/35", "direction": "to bottom"}, "texture": "grit"},
+  "art": {"box": [0, 0, 1, 0.7], "blend": "screen", "opacity": 0.6},
+  "photos": [
+    {"box": [0, 0, 1, 0.66], "focus": [0.5, 0.4],
+     "shade": [{"edge": "bottom", "size": 0.4, "color": "bg"}]}
+  ],
+  "text": [
+    {"slot": "headline", "box": [0.05, 0.03, 0.66, 0.15], "alt_box": [0.05, 0.47, 0.9, 0.1],
+     "font": "display", "size": [40, 100], "max_lines": 2, "fit": "each_line", "worn": true},
+    {"slot": "figure", "box": [0.04, 0.6, 0.92, 0.22], "font": "display", "size": [110, 300], "max_lines": 1,
+     "align": "center", "valign": "middle", "color": "accent", "line_height": 0.92},
+    {"slot": "tagline", "box": [0.06, 0.84, 0.88, 0.11], "font": "condensed", "size": [24, 48], "max_lines": 2,
+     "align": "center", "valign": "middle", "plate": {"color": "accent", "style": "block", "pad": [8, 22]}}
+  ],
+  "logo": {"box": [0.74, 0.03, 0.22, 0.05]},
+  "slots": {
+    "headline": {"type": "text", "max_words": 6, "max_chars": 34, "hint": "the short line over the figure",
+                 "examples": [["MOST POINTS", "IN ONE NIGHT"]]},
+    "figure": {"type": "number", "max_chars": 6, "hint": "digits, up to six characters", "examples": ["61"]},
+    "tagline": {"type": "text", "required": false, "max_words": 9, "max_chars": 60,
+               "hint": "an optional line in the bar at the bottom", "examples": ["A CLUB RECORD SINCE 1998"]}
+  }
+}

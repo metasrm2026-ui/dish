@@ -1,0 +1,37 @@
+# The routine triggers (claude.ai/code scheduled tasks), kept here so a change to a prompt, its
+# model or its connectors is reviewed and tested like code (tests/test_prompts.py). The live
+# triggers are set by hand: paste routines/<name>.prompt.md into the trigger, only once
+# ROUTINE_SECRET and APIFY_TOKEN are set in the environment's secrets (the prompts carry no values:
+# step 2 stops a session that does not find them there).
+environment: env_01Y5isNPRHkmR9Gbd3XoFYgv
+branch: claude/sleepy-cray-a7pcek
+secrets: [ROUTINE_SECRET, APIFY_TOKEN]          # names only: the values live in the environment's secrets
+triggers:
+  hourly:
+    id: trig_0173AyLHxCdPvoJcaSoyjR8E
+    schedule: "5 * * * *"
+    model: claude-sonnet-5
+    connectors: [krea]
+    prompt: routines/hourly.prompt.md
+    doc: ROUTINE.md
+  publisher:
+    id: trig_01WWAyWwh7eUJzMeBhMFDVQ1
+    schedule: "35 * * * *"                      # and fired by the dashboard on each approval (ROUTINE_FIRE_URL)
+    model: claude-sonnet-4-6
+    connectors: [socialpilot]
+    prompt: routines/publisher.prompt.md
+    doc: PUBLISH.md
+  topics:
+    id: trig_018u4Snu57qAyu2nApxRPCTN
+    schedule: "25 * * * *"
+    model: default                              # owner: pin it (the account default can change under it)
+    connectors: []
+    prompt: routines/topics.prompt.md
+    doc: TOPICS.md
+  studio:
+    id: trig_011C5nipHsMt7Lcqbn6qGbTM
+    schedule: null                              # fired by the dashboard on each editor click and by the watchdog (STUDIO_FIRE_URL)
+    model: default                              # owner: pin it
+    connectors: []                              # no Krea: page designs use the fallback (attach Krea only after its cap is shared)
+    prompt: routines/studio.prompt.md
+    doc: STUDIO.md

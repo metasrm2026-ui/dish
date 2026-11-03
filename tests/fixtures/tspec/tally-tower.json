@@ -1,0 +1,33 @@
+{
+  "id": "tally-tower",
+  "name": "Tally Tower",
+  "use_when": "A made-up test template: a column of number plates beside a photo, one word across the top.",
+  "visual_lane": "clean",
+  "background": {"fill": "bg", "gradient": {"to": "accent/25", "direction": "radial"}, "texture": "noise"},
+  "photos": [
+    {"box": [0.42, 0.14, 0.58, 0.86], "focus": [0.55, 0.3],
+     "shade": [{"edge": "left", "size": 0.3, "color": "bg"}]}
+  ],
+  "text": [
+    {"slot": "verdict", "box": [0.05, 0.025, 0.9, 0.1], "font": "display", "size": [52, 116], "max_lines": 1,
+     "valign": "middle", "worn": true},
+    {"slot": "footnote", "box": [0.05, 0.9, 0.64, 0.07], "font": "body", "size": [20, 34], "max_lines": 2,
+     "case": "as_is", "color": "ink/85", "valign": "middle"}
+  ],
+  "lists": [
+    {"slot": "stats", "box": [0.05, 0.16, 0.36, 0.72], "direction": "column", "gap": 14, "plate": "bg/80",
+     "emphasis_plate": "accent", "align": "left",
+     "value": {"size": [44, 116]}, "label": {"size": [16, 34]}}
+  ],
+  "logo": {"box": [0.72, 0.92, 0.24, 0.05]},
+  "slots": {
+    "verdict": {"type": "text", "max_words": 3, "max_chars": 18, "hint": "a word or two across the top",
+                "examples": ["UNSTOPPABLE"]},
+    "stats": {"type": "list", "min_items": 2, "max_items": 4, "value_max_chars": 6, "label_max_words": 3,
+              "label_max_chars": 18, "hint": "two to four plates; the last is drawn in the accent colour",
+              "examples": [{"value": "31", "label": "POINTS"}, {"value": "12", "label": "REBOUNDS"},
+                           {"value": "9", "label": "ASSISTS"}]},
+    "footnote": {"type": "text", "required": false, "max_words": 10, "max_chars": 64,
+                 "examples": ["In 34 minutes off the bench"]}
+  }
+}

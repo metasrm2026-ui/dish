@@ -1,0 +1,292 @@
+# Global system configuration. Page-specific data lives in config/pages.yaml
+# (generated from the source workbook by `bore import-workbook`).
+# Credentials are read from .env (gitignored), never from this file.
+
+db_path: data/bore.db
+output_dir: output
+default_timezone: America/New_York
+
+# ---------------------------------------------------------------- collection
+# ---------------------------------------------------------------- hourly routine
+# `bore hourly` runs every hour. Total Apify spend (X + Reddit + web) is capped at
+# monthly_usd (below the $19 plan ceiling and the $20 target); see bore/budget.py.
+budget:
+  monthly_usd: 16.0
+schedule:                          # optional sources run when due AND the pacer allows
+  reddit_every_hours: 6
+  web_every_hours: 6
+  sites_every_hours: 1             # websites an admin added (site: searches): ~$0.0035 each per hour
+  refresh_every_hours: 4
+  x_secondary_every_hours: 3       # one rotating batch of x_handles_secondary per pass
+  escalate_min_gap_hours: 6        # per page
+  escalation_queries: 5
+  default_cost_usd: {x: 0.01, x2: 0.012, reddit: 0.06, web: 0.035, refresh: 0.02, escalation: 0.02}
+posting:
+  daily_cap: 20                    # posts per page per day (page-local day)
+  active_hours: [7, 23]            # page-local hours in which picks are proposed
+  max_picks_per_run: 3            # 20 posts over 16 active hours, with room to catch up after skips
+
+# Budget plan for $16/month total (~$0.53/day; guard also stops at 85% of the $19 ceiling):
+#   X primary (42 handles) $0.00015/tweet hourly    ~$0.16/day
+#   X secondary: 1 batch of ~25 handles every 3h, <=80 tweets     <=$0.10/day
+#   Reddit $0.00139/post: 5 core + 2 rotating subs x 6 posts, every 6h  ~$0.23/day
+#   Google $0.0035/query: 4/page + 3 rotating site: searches every 6h ~$0.15/day
+#   refresh + escalation ~$0.05/day. That is slightly over the daily share at full volume, so the
+#   pacer skips optional passes (x2, reddit, web, refresh) when a day runs hot; X primary always runs.
+collection:
+  default_window_hours: 1          # normal hourly window
+  overlap_minutes: 10              # re-cover the tail of the last window
+  max_backfill_hours: 24           # a missed hour widens the next window, capped here
+  hourly_sources: [x]              # `bore collect` with no flags
+  brief_sources: [reddit, web]     # collected at the start of each `bore brief` (twice daily)
+  web_searches_per_page: 4         # the first N of each page's web_searches per web pass
+  web_rotation_per_run: 3          # plus the next N of the page's web_rotation (site: searches)
+
+apify:
+  base_url: https://api.apify.com/v2
+  budget_guard_pct: 0.85           # refuse to start a run past this share of the monthly ceiling
+  poll_seconds: 5
+
+  x:
+    actor: xquik/x-tweet-scraper
+    cost_per_item_usd: 0.00015
+    query_max_chars: 460           # `from:a OR from:b ...` batches stay under this
+    timeout_seconds: 600
+    max_items_per_query: 400
+    secondary_max_items: 80        # tweet cap for one x_handles_secondary batch
+    # Settings proven on live runs; see README "Settled findings".
+    input:
+      mode: search                 # profileTweets returned 1 tweet where search returned 40
+      queryType: Latest
+      tweetTypes:
+        excludeReplies: true
+      "include:nativeretweets": true   # search drops reposts by default; they ARE corroboration
+      includeOriginalTweet: true       # gives the reposted author = independent source
+    since_key: since_time          # unix seconds (as a string). NEVER within_time (96% wasted)
+    search_terms_key: searchTerms
+    max_items_key: maxItems
+
+  reddit:
+    actor: fatihtahta/reddit-scraper-search-fast
+    cost_per_item_usd: 0.00139
+    timeout_seconds: 900           # ~20 s per subreddit; timed-out runs are billed, so salvage
+    max_posts_per_subreddit: 6     # applies PER SUBREDDIT URL, not per run
+    rotation_per_run: 2            # subreddits_rotation entries added per page per pass
+    drop_if_true: [stickied, pinned]   # hot listing leads with pinned megathreads
+    input:
+      subredditSort: hot           # "new" returns score 0 / comments 0 on everything
+      includeNsfw: false
+    urls_key: urls                 # plain URL strings
+    max_posts_key: maxPosts
+
+  web:
+    actor: apify/google-search-scraper
+    cost_per_item_usd: 0.0035      # verify against your Apify plan
+    timeout_seconds: 300
+    exclude_domains: [reddit.com, x.com, twitter.com, facebook.com, instagram.com, tiktok.com,
+      youtube.com, wikipedia.org]  # covered elsewhere, or not news
+    drop_homepages: true           # "site.com/" results are section fronts, not stories
+    input:
+      maxPagesPerQuery: 1          # one results page (~10 results) per query
+      quickDateRange: d1           # last 24 h only
+      countryCode: us
+      searchLanguage: en
+    queries_key: queries           # newline-joined string
+
+# Field mapping: candidate paths per field, first non-empty match wins.
+# Actors rename fields; fix it here rather than in code.
+fields:
+  x:
+    id: [id, id_str, tweetId, rest_id]
+    text: [fullText, full_text, text]
+    author: [author.userName, author.screen_name, author.username, user.screen_name, userName, username]
+    created_at: [createdAt, created_at, timestamp]
+    url: [url, twitterUrl, tweetUrl]
+    likes: [likeCount, favorite_count, favoriteCount, likes]
+    reposts: [retweetCount, retweet_count, retweets]
+    replies: [replyCount, reply_count, replies]
+    quotes: [quoteCount, quote_count, quotes]
+    is_repost: [isRetweet, is_retweet, retweeted_tweet, retweetedTweet, retweeted_status]
+    original_author: [retweetedTweet.author.userName, retweeted_tweet.author.userName, retweeted_status.user.screen_name]
+    original_text: [retweetedTweet.fullText, retweetedTweet.text, retweeted_tweet.text, retweeted_status.full_text]
+    original_id: [retweetedTweet.id, retweeted_tweet.id, retweeted_status.id_str]
+    media: [media, extendedEntities.media, extended_entities.media]
+  reddit:
+    id: [id, postId, name]
+    title: [title]
+    text: [body, selftext, text]
+    author: [author, username, authorName]
+    subreddit: [subreddit, communityName, subredditName]
+    created_at: [createdAt, created_utc, created, postedAt]
+    url: [url, permalink, postUrl]
+    score: [score, upVotes, upvotes, ups]
+    comments: [numComments, num_comments, commentsCount, numberOfComments]
+    image: [url_overridden_by_dest, preview.images.0.source.url]   # each tried in turn, then the gallery
+    link: [url_overridden_by_dest]  # a link post: the article it shares
+  web:
+    list: [organicResults]         # each dataset item holds a list of results
+    query: [searchQuery.term, searchQuery, query]
+    title: [title]
+    text: [description, snippet]
+    url: [url, link]
+    created_at: [date, publishedAt]
+  fb_posts:                        # Graph API post objects and Business Suite export columns
+    id: [id, Post ID, postId]
+    created_at: [created_time, Publish time, timestamp, time]
+    message: [message, Description, Title, text]
+    url: [permalink_url, Permalink, url]
+    link: [attachments.data.0.url, link]
+    media_type: [attachments.data.0.media_type, attachments.data.0.type, Post type, status_type]
+    is_video: [isVideo]
+    reactions: [reactions.summary.total_count, Reactions]
+    comments: [comments.summary.total_count, Comments]
+    shares: [shares.count, Shares]
+    interactions: ["Reactions, Comments and Shares"]
+    page_name: [Page name, from.name]
+    page_url: [Page URL]
+  fanpagekarma:
+    list: [data, posts, data.posts]
+    id: [id, post_id]
+    created_at: [date, created_time, published_at, time]
+    message: [message, text, caption]
+    type: [type, post_type, format]
+    link: [link, url, permalink]
+    reactions: [reactions, likes, kpi.page_posts_reactions.value]
+    comments: [comments, kpi.page_posts_comments_count.value]
+    shares: [shares, kpi.page_posts_shares_count.value]
+    interactions: [interactions, engagement, kpi.page_total_engagement_count.value]
+
+# ------------------------------------------------------------- page DNA
+# Page DNA comes from the page's own history WITHOUT any Facebook scraper:
+#   bore dna --page P --file export.csv   Meta Business Suite > Insights > Content > Export
+#   bore dna --page P --source graph      Graph API with the page's access token (.env
+#                                          FB_PAGE_TOKEN_<SLUG>), the token publishing needs anyway
+page_dna:
+  history_days: 60
+  graph:
+    version: v21.0
+    fields: "id,message,created_time,permalink_url,status_type,attachments{media_type,type},reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares"
+
+# Optional alternative source (`bore dna --source fanpagekarma`).
+fanpagekarma:
+  base_url: https://app.fanpagekarma.com/api/v2
+  history_days: 90
+  slice_days: 7                    # <1000 posts per request; <8-day slices get 365/hr vs 75/hr
+  period_param: period             # value format below
+  period_format: "{start}_{end}"   # dates as YYYY-MM-DD
+  min_seconds_between_requests: 10
+
+# ------------------------------------------------------------- clustering
+clustering:
+  join_threshold: 0.60             # tightest value passing BOTH fixtures (range 0.40-0.60 on
+                                   # 2026-09-26): the synthetic failure-mode set and a real
+                                   # hand-labelled Culture Rush window. Re-tune: `bore tune tests/fixtures/*.json`
+  entity_boost: 3.0                # names (proper nouns) weigh 3x: they identify a story, templates don't
+  avg_sim_ratio: 0.55              # average similarity to whole cluster >= ratio * join threshold
+  min_shared_tokens: 2
+  max_age_hours: 24                # hard freshness gate, enforced here AND at render
+  window_hours: 12                 # twice-daily briefings
+  website_window_hours: 24         # pages read only from their admins' websites keep the day's unbriefed articles
+  boilerplate_title_patterns:
+    - '(?i)\bgame ?thread\b'
+    - '(?i)\bpost[- ]?game ?thread\b'
+    - '(?i)\bpre[- ]?game ?thread\b'
+    - '(?i)\bdaily\b.*\b(discussion|thread)\b'
+    - '(?i)\bmega ?thread\b'
+    - '(?i)\bthread index\b'
+    - '(?i)\b(free talk|off[- ]?topic|weekly)\b.*\bthread\b'
+    - '(?i)\bmatch ?thread\b'
+    - '(?i)\bfree talk\b'
+    - '(?i)^official r/'
+    - '(?i)\b(weekly|daily)\b.*\b(discussion|thread|megathread)\b'
+
+scoring:
+  weights: {sources: 3.0, platforms: 1.5, velocity: 1.0, volume: 0.8, recency: 1.0, priority: 1.0, kind: 3.0}  # priority: per page-core name, max 2
+  recency_half_life_hours: 6
+  learning: true      # multiply a story's score by its kind's learned weight (bore/lessons.py)
+
+selection:
+  posts_per_day: 20                # per page; the shortlist is sized to hit this
+  briefings_per_day: 2             # -> 5 picks per page per briefing
+  shortlist_backups: 10            # extra picks: Claude works down them until the run's quota is filled
+  shortlist_min_tokens: 5          # a pick needs enough content to write a post from
+  min_sources_corroborated: 2
+  scoop_min_engagement: 5000       # single tier-one reporter override
+  high_volume_posts_per_window: 25 # accounts above this cannot be scooping
+  watchlist_min_score: 2.0
+  watchlist_max_per_page: 60
+
+dedup:
+  suppress_hours: 96
+  fuzzy_signature_overlap: 0.5
+  signature_terms: 6
+  allow_redevelop: false           # never re-post a story because it grew (updates: copy.update_of)
+  redevelop_engagement_ratio: 2.0
+  redevelop_new_sources: 2
+  redevelop_score_delta: 3.0
+
+refresh:
+  min_age_minutes: 45
+  min_interval_hours: 3
+  max_items_per_run: 40            # budget: only the posts that can move rankings
+  x_max_items: 150
+  platforms: [x]                   # Reddit is collected fresh right before each briefing
+
+health:
+  quiet_handle_hours: 72
+
+# ------------------------------------------------------------- post creation
+# Hourly routine: pick -> caption + card copy (Claude) -> photos -> infographic (Krea) ->
+# verification (Claude vision) -> dashboard (approve / reject) -> SocialPilot on approval.
+posts:
+  photo_retry_hours: 3      # a story skipped only for its photo comes back after this
+  photo_retry_max: 2
+  video_still_min_short_side: 720   # stills of a story's video (celebrity/viral pages; bore/stills.py)
+  video_stills: {frames: 8, budget_s: 25, x_search: true}
+  image_budget_s: 240              # per prepare run: photo checks, linked/news photos, video stills
+  min_photo_short_side: 800        # px; anything softer is rejected ("as clear as what already exists")
+  min_niche_fit: 8                 # 0-10 from the writer; below this lint refuses the post (raised after Sep 29 reviews)
+  max_attempts_per_pick: 2         # Krea generations per post before falling back to the template renderer
+  allow_video_frames: false        # video poster frames are usually too soft
+  drafts_dir: output/drafts
+
+claude:
+  model: claude-opus-5             # captions, card copy and image verification
+  effort: medium
+
+krea:
+  base_url: https://api.krea.ai
+  # Art mode (default): Krea 2 Turbo paints each card's artwork (page-style backdrop, team colours,
+  # story mood; never people or text), and the renderer lays the real photo, logo and exact text
+  # on top. ~15 credits per image (K2 Turbo $0.015 API price; the plan's 20,000 credits = 257 Nano
+  # Banana 2 at $0.08, so ~1 credit per $0.001). 20 posts x 2 pages x 30 days = 1,200 images +
+  # retries fits the plan's 20,000 monthly credits. Faces are always the real photo's pixels and
+  # card text is always exact, so the old Krea failure modes (invented numbers, altered faces,
+  # repeated lines) cannot happen.
+  # mode: full = the image model composes the whole card from the photo (nano-banana-flash-lite,
+  # ~33 credits; only ~600 a month fit).
+  # mode: premium (owner, Nov 1: GPT-level cards, accepting that the model redraws the photo): the
+  # image model makes the whole card from the real photo, in the layout of the page's own card (the
+  # template renderer's card with the exact text, sent as a second image), with a "Photo: <source>"
+  # credit. verify reads every line back, the face must match the chosen photo's, and a card that
+  # fails twice falls back to the template renderer. Nano Banana 2.1: ~22 credits a card.
+  mode: premium
+  premium:
+    model: google/nano-banana-2.1
+    input: {aspect_ratio: "4:5", resolution: "1K", thinking_level: "high"}
+  model: krea/krea-2/medium-turbo
+  art_input: {aspect_ratio: "4:5", resolution: "1K", creativity: "low"}   # low: richer texture detail
+  aspect_ratio: "4:5"
+  monthly_credits: 20000
+  credits_per_image: 22
+  # shared by the hourly routine and Post Studio, within the plan's 20,000 credits (owner, Oct 23 and
+  # Nov 1): 860 premium cards x ~22 credits = ~18,900 credits (~28 a day: the hourly posts and Studio)
+  monthly_max_images: 860
+  monthly_max_usd: 20.0
+  prices_usd:                      # API price per image (krea.ai/app/api/pricing, 2026-09-29)
+    krea/krea-2/medium-turbo: 0.015
+    google/nano-banana-2.1: 0.022
+    google/nano-banana-flash-lite: 0.034
+    bfl/flux-1-dev: 0.007
+    bytedance/seedream-5-lite: 0.035
+    google/nano-banana-2: 0.08

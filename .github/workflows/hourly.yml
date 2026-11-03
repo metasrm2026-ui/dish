@@ -1,0 +1,60 @@
+# The hourly routine. Runs `bore hourly` every hour on GitHub's runners.
+# State (SQLite DB) and the latest picks live on the `state` branch, overwritten each run
+# (single commit, so the repository does not grow). Requires repo secret APIFY_TOKEN.
+name: hourly
+on:
+  # schedule:                      # switched on once the full pipeline is configured
+  #   - cron: "7 * * * *"
+  workflow_dispatch: {}
+concurrency:
+  group: bore-hourly
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  hourly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Restore state
+        run: |
+          mkdir -p data output
+          if git fetch --depth=1 origin state 2>/dev/null; then
+            git show FETCH_HEAD:bore.db > data/bore.db
+            echo "restored $(du -h data/bore.db | cut -f1) database"
+          else
+            echo "no state branch yet: starting fresh"
+          fi
+
+      - name: Hourly routine
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: python -m bore.cli hourly
+
+      - name: Save state and picks
+        if: always()
+        run: |
+          [ -f data/bore.db ] || exit 0
+          rm -rf /tmp/state && mkdir -p /tmp/state/briefings
+          cp data/bore.db /tmp/state/
+          cp output/latest.md output/latest.pdf /tmp/state/ 2>/dev/null || true
+          cp output/hourly-*.pdf /tmp/state/briefings/ 2>/dev/null || true
+          git fetch --depth=1 origin state 2>/dev/null && git archive FETCH_HEAD briefings | tar -x -C /tmp/state 2>/dev/null || true
+          ls -1t /tmp/state/briefings/*.pdf 2>/dev/null | tail -n +49 | xargs -r rm
+          cd /tmp/state
+          git init -q -b state
+          git config user.name "bore-routine"
+          git config user.email "bore-routine@users.noreply.github.com"
+          git add -A
+          git commit -qm "state $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" state:state
+
+      - name: Health
+        run: python -m bore.cli health

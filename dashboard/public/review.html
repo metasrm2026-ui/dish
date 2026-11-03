@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Hourly approvals</title>
+<style>
+:root { --bg:#f5f5f2; --panel:#fff; --ink:#15151a; --muted:#6a6a75; --line:#e2e2dc; --soft:#efefea;
+  --ok:#0f7a38; --ok-bg:#e1f3e7; --no:#b3261e; --no-bg:#fbe6e4; --warn:#8a5a00; --warn-bg:#fdf0d5; --focus:#2451d6; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0f0f12; --panel:#18181d; --ink:#ececf1; --muted:#9696a3; --line:#2a2a32; --soft:#22222a;
+  --ok:#5fd18a; --ok-bg:#12301f; --no:#ff8a80; --no-bg:#3a1714; --warn:#f2c46b; --warn-bg:#352a12; --focus:#8fb0ff; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+button { font:inherit; color:inherit; }
+header { position:sticky; top:0; z-index:5; background:var(--bg); border-bottom:1px solid var(--line); }
+@media (max-width: 700px), (max-height: 700px) { header { position:static; } }
+.bar { max-width:1180px; margin:0 auto; padding:12px 16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+h1 { font-size:17px; margin:0 8px 0 0; }
+.tabs { display:flex; gap:4px; background:var(--soft); padding:3px; border-radius:10px; max-width:100%; overflow-x:auto; scrollbar-width:none; }
+.tabs button { white-space:nowrap; }
+.tabs button { border:0; background:transparent; padding:6px 12px; border-radius:8px; cursor:pointer; color:var(--muted); font-weight:600; }
+.tabs button.on { background:var(--panel); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+.clearbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; max-width:1200px; margin:10px auto 0; padding:10px 14px; background:var(--panel); border-radius:12px; font-size:14px; }
+.clearbar button { border:1px solid var(--line, #ddd); background:var(--panel); border-radius:8px; padding:6px 12px; cursor:pointer; font-weight:600; }
+.clearbar button:disabled { opacity:.5; cursor:default; }
+.pick { position:absolute; margin:8px; z-index:2; background:rgba(255,255,255,.92); padding:3px 8px; border-radius:8px; font-size:13px; font-weight:600; }
+.tabs .n { font-weight:500; opacity:.7; margin-left:4px; }
+.sort { display:flex; gap:2px; background:var(--soft); padding:3px; border-radius:10px; align-items:center; }
+.sort span { color:var(--muted); font-size:12px; padding:0 6px 0 4px; }
+.sort button { border:0; background:transparent; padding:5px 10px; border-radius:8px; cursor:pointer; color:var(--muted); font-weight:600; font-size:13px; }
+.sort button.on { background:var(--panel); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+.created { display:flex; gap:6px; align-items:baseline; font-size:13px; }
+.created b { font-weight:700; }
+select { border:1px solid var(--line); background:var(--panel); color:var(--ink); padding:7px 10px; border-radius:9px; font:inherit; }
+.linkbox { max-width:1180px; margin:0 auto; padding:12px 16px 0; }
+.linkbox details { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 14px; }
+.linkbox summary { cursor:pointer; font-weight:700; font-size:14px; color:var(--ink); }
+.linkbox summary .muted { font-weight:500; margin-left:6px; }
+.linkform { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.linkform input { flex:1 1 320px; min-width:0; border:1px solid var(--line); background:var(--bg); color:var(--ink); padding:9px 11px; border-radius:9px; font:inherit; }
+.linkform input.note { flex:1 1 220px; }
+.linkform button { border:0; border-radius:9px; padding:9px 16px; font-weight:700; cursor:pointer; background:var(--focus); color:#fff; }
+.linkform button:disabled { opacity:.5; }
+.links { list-style:none; margin:10px 0 2px; padding:0; display:flex; flex-direction:column; gap:6px; font-size:13px; }
+.links li { display:flex; gap:8px; align-items:baseline; min-width:0; }
+.links a { color:var(--focus); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1 1 200px; }   /* too narrow: its own line */
+.links .why { color:var(--no); flex-basis:100%; padding-left:4px; font-size:12.5px; }
+.why, .note, .banner, .status { overflow-wrap:anywhere; }   /* a long link in a note never widens a phone's page */
+.links li { flex-wrap:wrap; }
+.today { max-width:1180px; margin:0 auto; padding:0 16px 12px; display:flex; gap:10px; flex-wrap:wrap; }
+.tile { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px 12px; min-width:200px; }
+.tile b { display:block; font-size:13px; }
+.meter { height:6px; background:var(--soft); border-radius:3px; margin:6px 0 4px; overflow:hidden; display:flex; }
+.meter i { display:block; height:100%; }
+.tile small { color:var(--muted); font-size:12px; }
+.keys { margin-left:auto; color:var(--muted); font-size:12px; }
+kbd { border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; font:11px ui-monospace, monospace; background:var(--panel); }
+main { max-width:1180px; margin:0 auto; padding:4px 16px 60px; display:flex; flex-direction:column; gap:16px; }
+.post { position:relative; background:var(--panel); border:1px solid var(--line); border-radius:14px; display:grid; grid-template-columns: minmax(0, 420px) 1fr; overflow:hidden; }
+.post.focus { outline:2px solid var(--focus); outline-offset:2px; }
+.post .img { background:transparent; position:relative; align-self:start; }
+.post .img img { border-radius:0 0 0 0; }
+.post.asis .img > img { aspect-ratio:auto; object-fit:contain; }   /* as is: the whole original, uncropped */
+.post .img .extras { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; font-size:12px; }
+.post .img .extras img { width:72px; height:72px; object-fit:cover; cursor:zoom-in; }
+.post img { width:100%; aspect-ratio:4/5; object-fit:cover; display:block; cursor:zoom-in; }
+.src { display:flex; gap:10px; align-items:center; font-size:12.5px; color:var(--muted); }
+.src img { width:64px; height:64px; aspect-ratio:auto; object-fit:cover; border-radius:8px; border:1px solid var(--line); }
+.side { padding:14px 16px 16px; display:flex; flex-direction:column; gap:10px; min-width:0; }
+.meta { display:flex; gap:6px; flex-wrap:wrap; align-items:center; font-size:12.5px; }
+.pill { padding:2px 9px; border-radius:999px; font-weight:600; background:var(--soft); }
+.pill.ok { background:var(--ok-bg); color:var(--ok); }
+.pill.warn { background:var(--warn-bg); color:var(--warn); }
+.pill.no { background:var(--no-bg); color:var(--no); }
+.muted { color:var(--muted); font-size:13px; }
+.why { font-size:13.5px; }
+.caphead { display:flex; justify-content:space-between; align-items:center; font-size:12.5px; color:var(--muted); }
+.caphead button { border:0; background:none; color:var(--focus); cursor:pointer; font-size:12.5px; padding:0; }
+.caphead .edited { margin-left:auto; margin-right:12px; color:var(--warn); }
+.caphead .edited[hidden] { display:none; }
+.caphead .edited button { margin-left:6px; }
+textarea { width:100%; min-height:170px; resize:vertical; font:14.5px/1.5 system-ui, sans-serif; color:var(--ink); background:var(--bg);
+  border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+textarea:focus { outline:2px solid var(--focus); border-color:transparent; }
+details { font-size:13px; }
+details summary { cursor:pointer; color:var(--muted); }
+details a { color:var(--focus); word-break:break-all; display:block; margin-top:4px; }
+.check { font-size:12.5px; color:var(--muted); }
+.actions { display:flex; gap:8px; margin-top:auto; flex-wrap:wrap; }
+.actions button { border:0; border-radius:10px; padding:12px 16px; font-weight:700; cursor:pointer; }
+.fb { border:1px dashed var(--line); border-radius:10px; padding:10px 12px; display:block; }
+.fb > * + * { margin-top:8px; }
+.fb summary { cursor:pointer; font-size:13px; }
+.fb[open] summary { margin-bottom:8px; }
+.fb:not([open]) { padding:8px 12px; }
+.fb textarea { min-height:64px; font-size:13.5px; }
+.fbrow { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.fbrow label { border:1px solid var(--line); border-radius:9px; padding:7px 11px; cursor:pointer; font-size:13px; font-weight:600; color:var(--ink); background:var(--panel); }
+.fbrow input[type=file], .fbrow img[hidden] { display:none; }
+.fbrow img { width:44px; height:44px; object-fit:cover; border-radius:6px; border:1px solid var(--line); }
+.fbrow .fname { font-size:12.5px; color:var(--muted); max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.regen { margin-left:auto; border:0; border-radius:9px; padding:8px 14px; font-weight:700; cursor:pointer; background:var(--focus); color:#fff; }
+.regen:disabled { opacity:.5; cursor:default; }
+.note { font-size:13px; border-radius:10px; padding:8px 10px; background:var(--soft); }
+.note img { width:56px; height:70px; object-fit:cover; border-radius:6px; float:right; margin-left:8px; cursor:zoom-in; }
+.okay { background:var(--ok); color:#fff; flex:2; }
+.notokay { background:var(--no-bg); color:var(--no); flex:1; }
+.actions button:disabled { opacity:.5; cursor:default; }
+.banner { margin:10px 16px 0; padding:10px 14px; border:1px solid var(--no); border-radius:10px; background:var(--no-bg); line-height:1.45; }
+.banner .muted { display:block; margin-top:4px; font-size:12px; }
+.banner.amber { border-color:var(--warn); background:var(--warn-bg); }
+.banner.newver { margin:10px 16px; border-color:var(--focus); background:var(--panel); }
+.banner.newver button { margin-left:8px; border:0; border-radius:8px; padding:6px 14px; font-weight:700; cursor:pointer; background:var(--focus); color:#fff; }
+.loaderr { text-align:center; color:var(--no); padding:60px 16px; }
+.loaderr button, .banner .again { border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:8px; padding:6px 14px; cursor:pointer; font-weight:600; margin-left:6px; }
+.learn { margin:8px 16px 0; padding:8px 12px; border:1px dashed var(--line); border-radius:10px; font-size:13px; line-height:1.45; }
+.reasons { display:none; gap:6px; flex-wrap:wrap; }
+.reasons.show { display:flex; }
+.reasons .why-note { flex-basis:100%; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:inherit; font:inherit; font-size:13px; }
+.reasons button { border:1px solid var(--line); background:var(--panel); border-radius:999px; padding:5px 10px; cursor:pointer; font-size:13px; }
+.status { font-size:13.5px; font-weight:600; }
+.empty { text-align:center; color:var(--muted); padding:80px 0; }
+.login { max-width:360px; margin:14vh auto; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:24px; display:grid; gap:10px; }
+.login input { padding:11px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--ink); font:inherit; }
+.login button { padding:11px; border:0; border-radius:10px; background:var(--ink); color:var(--bg); font-weight:700; cursor:pointer; }
+.toast { position:fixed; left:16px; right:16px; margin:0 auto; width:max-content; max-width:calc(100vw - 32px); bottom:20px; background:var(--ink); color:var(--bg);
+  padding:10px 16px; border-radius:10px; font-weight:600; opacity:0; transition:opacity .2s; pointer-events:none; z-index:20; }
+.toast.show { opacity:1; pointer-events:auto; cursor:pointer; }
+dialog { border:0; padding:0; background:transparent; max-width:96vw; } dialog img { max-height:92vh; max-width:96vw; display:block; border-radius:8px; }
+dialog::backdrop { background:rgba(0,0,0,.85); }
+@media (max-width: 760px) { .post { grid-template-columns: 1fr; } .keys { display:none; } .tile { flex:1; min-width:140px; } }
+</style>
+</head>
+<body>
+<div id="app"><div class="empty">Loading…</div></div>
+<div class="toast" id="toast"></div>
+<dialog id="zoom" onclick="this.close()"><img id="zoomimg" alt=""></dialog>
+<script>
+const CAP = 20;
+const REASONS = ['Weak story', 'Old news by now', 'Off-niche', 'Image quality', 'Wrong / unverified facts', 'Caption off-voice', 'Duplicate'];
+const $ = s => document.querySelector(s);
+let key = 'open', wasIn = false;   // wasIn: an answer came signed in (a later refusal: signed out after a break)
+let tab = 'pending', page = 'all', drafts = [], stats = {}, totals = {}, publisher = {}, lessonsSummary = [], focusIdx = 0, links = [], linkOpen = false, health = {}, healthAt = 0;
+let myPages = null;          // the user's pages and their names as set in Admin > Pages (/api/auth/me): one tile each
+let order = 'new'; try { if (localStorage.getItem('dashOrder') === 'old') order = 'old'; } catch (e) {}
+// what the editor typed and has not sent yet, by post ({caption, note, reasons, fb, fbOpen, st: the
+// post's status then}): every redraw draws it again, and it outlives a reload or a sign-in in this tab.
+// Gone once that post is decided or sent back, or undone. files: feedback images attached, by post.
+let edits = {}; try { edits = JSON.parse(sessionStorage.getItem('reviewEdits') || '{}') || {}; } catch (e) {}
+const files = {}, refusedNow = new Set();     // refusedNow: its decision was just refused, the editor was told why
+let drawnIds = '', drawnAt = -1e9, decidedAt = -1e9;   // the posts last drawn, when the list last moved, the last decision
+// a caption with something to read (not only spaces or zero-width characters)
+const written = s => /[^\s\u200b-\u200d\u2060\ufeff]/.test(s);
+let loading = false, loadError = false, loadedTab = null, loadSeq = 0, retryT = 0, version = null, versionAt = 0, stale = false, cut = 0, healthAfter = 0;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// shown long enough to read (a long message stays longer); a tap closes it, and so does a tap anywhere
+// else, which still reaches what it was meant for
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h);
+  if (!t._away) { t._away = true; document.addEventListener('pointerdown', e => { if (!t.contains(e.target)) t.classList.remove('show'); }, true); }
+  t.onclick = () => t.classList.remove('show'); t._h = setTimeout(() => t.classList.remove('show'), Math.max(2600, 70 * String(msg).length)); }
+async function api(path, opts = {}) {
+  if (stale && opts.method && opts.method !== 'GET') throw new Error('A new version of this page is available: reload it first (your unsent edits are kept)');
+  let r;
+  try { r = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) } }); }
+  catch (e) {                // no answer at all: the browser's own text is not shown
+    throw Object.assign(new Error('No connection: check the internet connection, then try again'), { offline: true });
+  }
+  // (signed in on this page, signed out since: the sign-in screen says why)
+  if (r.status === 401) { location.href = wasIn ? '/#/login?next=review&why=idle' : '/#/login?next=review';
+                          throw new Error(wasIn ? 'Signed out after a break: sign in to carry on' : 'Sign in first'); }
+  if (r.ok) wasIn = true;
+  const j = await r.json().catch(() => ({}));
+  // the platform's own page, not ours (e.g. a request cut off after 60 s): what was asked may have been done
+  if (!r.ok && !j.error && r.status >= 500) throw Object.assign(new Error(opts.method && opts.method !== 'GET' ? 'The dashboard did not answer in time: it may have gone through, so look at the list again before trying again' : 'The dashboard did not answer in time: try again in a minute'), { status: r.status });
+  // (storage's status code is left out of its words: "storage is not answering (503): ...")
+  if (!r.ok) throw Object.assign(new Error(j.error ? String(j.error).replace(/ \((?:\d{3}|no connection)\)(?=:)/, '') : 'The dashboard did not answer: try again in a minute'), { status: r.status, said: !!j.error });
+  return j;
+}
+function loginView() { location.href = '/#/login?next=review'; }
+function todayTiles() {
+  const shown = myPages || Object.keys(stats).map(s => ({ slug: s, name: s }));
+  return shown.map(({ slug: s, name }) => {
+    const c = stats[s] || {}; const posted = (c.posted || 0) + (c.scheduled || 0), approved = (c.approved || 0) + (c.publishing || 0), pending = c.pending || 0, rej = c.rejected || 0, failed = c.failed || 0;
+    const w = n => Math.min(100, n / CAP * 100);
+    return `<div class="tile"><b>${esc(name || s)}: ${posted + approved}/${CAP} today</b>
+      <div class="meter"><i style="width:${w(posted + approved)}%;background:var(--ok)"></i><i style="width:${w(pending)}%;background:var(--warn)"></i></div>
+      <small>${posted} scheduled/posted · ${pending} waiting · ${rej} rejected${failed ? ` · <b style="color:var(--no)">${failed} failed</b>` : ''}</small></div>`;
+  }).join('');
+}
+function card(d, i) {
+  const v = d.verification || {};
+  const route = v.route === 'manual' ? ['ok', 'From your link'] : v.route === 'scoop' ? ['ok', 'Tier-one scoop'] : v.route === 'corroborated' ? ['ok', `Verified · ${(v.sources || []).length} sources`] : ['warn', 'Single source: check it'];
+  const open = d.status === 'pending' || d.status === 'failed';
+  const info = d.status_info || {};
+  const cap = info.caption || d.caption || '';
+  const e = edits[d.id] || {}, mine = open && e.caption != null, shown = mine ? e.caption : cap;
+  const status = { posted: ['ok', info.result && info.result.mode === 'dry_run' ? 'Approved (dry run: nothing sent)' : 'Posted via SocialPilot'],
+    rejected: ['no', 'Not okay' + (info.reason ? ': ' + info.reason : '') + (info.note ? ' (' + info.note + ')' : '')], failed: ['no', 'Publishing failed' + (info.error ? ': ' + info.error : ' (no reason given)')],
+    approved: ['warn', info.held ? `Approved · waiting for SocialPilot (tried ${info.holds || 1}×, again within the hour)` : 'Approved · being scheduled in SocialPilot'], scheduled: ['ok', 'Scheduled in SocialPilot for ' + (info.result && info.result.scheduled_for ? new Date(info.result.scheduled_for).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '…')], publishing: ['warn', 'Publishing to SocialPilot…'],
+    regenerate: ['warn', '↻ Will be regenerated in the next hourly run'],
+    regenerated: ['muted', 'Replaced by a regenerated version' + (info.new_id ? ' (see Waiting)' : '')],
+    cleared: ['muted', info.auto ? 'Cleared at midnight (not reviewed)' : 'Cleared without review' + (info.by ? ' by ' + info.by : '')] }[d.status];
+  const posted = d.status === 'posted' && info.result && /^https?:\/\//i.test(info.result.url || '') ? info.result.url : '';   // a link to the post
+  const check = d.check && d.check.pass ? `Image check passed${d.check.checked ? ': ' + d.check.checked : ''}` : '';
+  return `<article class="post${i === focusIdx ? ' focus' : ''}${d.as_is ? ' asis' : ''}" data-i="${i}" data-id="${esc(d.id)}">
+    ${['pending', 'failed', 'cleared'].includes(d.status) ? `<label class="pick"><input type="checkbox" ${picked.has(d.id) ? 'checked' : ''} onchange="pick('${esc(d.id)}', this.checked)"> select</label>` : ''}
+    <div class="img"><img src="${esc(d.image_url)}" alt="${esc(d.headline)}" loading="lazy" onclick="zoom('${esc(d.image_url)}')">
+      ${d.as_is || (d.extra_images || []).length ? `<div class="extras">${(d.extra_images || []).map(u => `<img src="${esc(u)}" alt="" loading="lazy" onclick="zoom('${esc(u)}')">`).join('')}
+        <span class="muted">${(d.extra_images || []).length ? `${(d.extra_images || []).length + 1} images, posted together in this order` : 'The original image'} · as is, no card (the editor asked)</span></div>` : ''}</div>
+    <div class="side">
+      <div class="meta"><span class="pill">${esc(d.page_name)}</span><span class="pill ${route[0]}">${route[1]}</span>
+        <span class="pill">fit ${esc(d.niche_fit ?? '–')}/10</span><span class="muted">${esc(d.engine || '')}</span></div>
+      <div class="created" title="${esc(fullTime(d.created_at_unix))}"><span class="muted">Created</span><b>${esc(fullTime(d.created_at_unix))}</b><span class="muted">· ${esc(ago(d.created_at_unix))}</span></div>
+      ${d.status === 'pending' && Date.now() / 1000 - (d.created_at_unix || 0) > 24 * 3600 ? `<div class="why" style="color:var(--warn)">Made over a day ago: check it is still current before approving.</div>` : ''}
+      ${d.reason ? `<div class="why">${esc(d.reason)}</div>` : ''}
+      <div class="caphead"><span>Caption <span class="cc">${shown.length}</span> chars</span>
+        <span class="edited" ${mine ? '' : 'hidden'}>Your edit, not sent yet<button onclick="undoCap(this)">Undo</button></span><button onclick="copyCap(this)">Copy</button></div>
+      <textarea ${open ? '' : 'readonly'} oninput="capEdit(this)">${esc(shown)}</textarea>
+      ${open || (d.status === 'rejected' && !info.withdrawn) ? feedbackBox(e) : ''}
+      ${notes(d, info)}
+      <details><summary>Sources (${(d.sources || []).length}) · ${(v.sources || []).map(esc).join(', ')}</summary>${(d.sources || []).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join('')}</details>
+      ${check ? `<div class="check">✓ ${esc(check)}</div>` : ''}
+      ${d.source_photo ? `<div class="src"><img src="${esc(d.source_photo)}" alt="source photo" onclick="zoom('${esc(d.source_photo)}')">
+        <span>Source photo${(d.people_in_photo || []).length ? ' · ' + (d.people_in_photo || []).map(esc).join(', ') : ''}: compare faces and clothing with the card before approving.</span></div>` : ''}
+      ${status && !open ? `<div class="status" style="color:var(--${status[0]})">${esc(status[1])}${posted ? ` · <a href="${esc(posted)}" target="_blank" rel="noopener" style="color:var(--focus)">View on Facebook</a>` : ''}</div>` : ''}
+      ${d.status === 'approved' ? `<div class="actions"><button class="notokay" onclick="withdrawPost(this)" title="Not published after all (only before it is scheduled in SocialPilot)">Withdraw: don't post</button></div>` : ''}
+      ${d.status === 'failed' ? `<div class="status" style="color:var(--no)">${esc(status[1])}</div>` : ''}
+      ${open ? `<div class="actions"><button class="notokay" onclick="toggleReasons(this)">✗ Not okay</button>
+        <button class="okay" onclick="decide(this,'approve')">✓ Okay, post it</button></div>
+        <div class="reasons${e.reasons ? ' show' : ''}"><input class="why-note" type="text" maxlength="300" value="${esc(e.note || '')}" oninput="keep(this, 'note', this.value.trim() ? this.value : '')" placeholder="Why, in a few words (optional, the routine learns from it): e.g. 'injury practice updates are too minor' or 'wrong player in the photo'">
+          ${REASONS.map(r => `<button onclick="decide(this,'reject','${r}')">${r}</button>`).join('')}</div>` : ''}
+    </div></article>`;
+}
+// the pipeline's health (/api/health): what is not working right now, so nobody finds out from an empty queue
+function healthBanner() {
+  // SocialPilot's own outage has its banner below
+  const rs = (health.reasons || []).filter(r => !(publisher.held && r.code === 'publisher_held'));
+  if (!rs.length || !['amber', 'red'].includes(health.status)) return '';
+  const red = rs.some(r => r.level === 'red'), shown = rs.slice(0, 4);
+  return `<div class="banner${red ? '' : ' amber'}">${red ? '⛔' : '⚠'} <b>${red ? 'Part of the pipeline is not working' : 'Part of the pipeline is running with problems'}:</b>
+    ${shown.map(r => esc(r.plain || r.text)).join(' · ')}${rs.length > shown.length ? ` · and ${rs.length - shown.length} more` : ''}
+    ${rs.some(r => 'plain' in r) ? ' <a href="/#/admin/health">Details</a>' : ''} <span class="muted">Checked ${esc(ago(Math.floor((health.checked_at || Date.now()) / 1000)))}</span></div>`;
+}
+const healthBox = () => `<div id="health"${health.checked_at ? ` data-at="${Number(health.checked_at)}"` : ''}>${healthBanner()}</div>`;
+// fetched on its own and drawn when it arrives: the queue never waits for it (working it out can take
+// seconds), and at most once a minute (approving or rejecting reloads the queue, not the health)
+function loadHealth() {
+  if (Date.now() - healthAt < 50e3) return;
+  healthAt = Date.now();
+  api('/api/health' + (healthAfter ? '?after=' + healthAfter : '')).then(h => {
+    health = h || {};
+    const el = document.getElementById('health');
+    if (el) el.outerHTML = healthBox();
+  }).catch(() => {});
+}
+function publisherBanner() {
+  if (!publisher.blocked) return needsActionBanner();
+  if (publisher.held) {            // SocialPilot is down: approved posts wait and go out once it is back
+    const since = publisher.since ? new Date(publisher.since).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    if (publisher.stale) return needsActionBanner() + `<div class="banner">⚠ <b>SocialPilot refused posts at the last try${publisher.last_failure_at ? ' (' + esc(new Date(publisher.last_failure_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) + ')' : ''}.</b>
+      It may be back already: the next post you approve tests it, and waits if it is still down. <span class="muted">Last error: ${esc(publisher.error || 'unknown')}</span></div>`;
+    return needsActionBanner() + `<div class="banner">⚠ <b>${publisher.locked ? 'The SocialPilot account is locked' : 'SocialPilot is unavailable'}${since ? ' since ' + esc(since) : ''}.</b>
+      ${publisher.locked ? 'The SocialPilot account owner needs to fix it (SocialPilot → Settings → Billing / subscription). ' : ''}You can keep approving:
+      ${publisher.waiting ? `${publisher.waiting} approved post(s) are waiting (Queued tab) and` : 'approved posts wait and'} go out automatically once it is back (tried about every hour; you can withdraw one there).
+      A post still waiting ${publisher.hold_hours || 12} hours after approval moves to the Failed tab for you to retry or drop.
+      <span class="muted">Last error: ${esc(publisher.error || 'unknown')}</span></div>`;
+  }
+  const since = publisher.last_failure_at ? new Date(publisher.last_failure_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const what = publisher.locked ? 'The SocialPilot account is locked' : 'SocialPilot is refusing posts';
+  return needsActionBanner() + `<div class="banner">⚠ <b>${what}.</b> Nothing can be scheduled until it is fixed${publisher.locked ? ' by the SocialPilot account owner (SocialPilot → Settings → Billing / subscription)' : ''}.
+    Posts you approve now will fail. ${publisher.failed_since_ok ? `${publisher.failed_since_ok} post(s) failed since the last successful one; ` : ''}after it is fixed, retry the ones still worth posting from the <a href="#" onclick="tab='failed';load();return false">Failed tab</a>.
+    <span class="muted">Last error${since ? ' (' + esc(since) + ')' : ''}: ${esc(publisher.error || 'unknown')}</span></div>`;
+}
+function retryBar(shown) {
+  const n = shown.filter(d => picked.has(d.id)).length;
+  return `<div class="clearbar"><label><input type="checkbox" ${n && n === shown.length ? 'checked' : ''} onchange="pickAll(this.checked)"> Select all ${shown.length}</label>
+    <button ${n ? '' : 'disabled'} onclick="retryPosts()">Retry selected${n ? ' (' + n + ')' : ''}</button>
+    <span class="muted">Approves them again with the captions shown (your edits included); the publisher schedules them at least 1 hour out. Only retry posts that are still timely.</span></div>`;
+}
+async function rejectPicked(sel) {
+  const reason = sel.value; sel.value = '';
+  const ids = visible().filter(d => picked.has(d.id)).map(d => d.id);
+  if (!reason || !ids.length || !confirm(`Mark ${ids.length} post${ids.length > 1 ? 's' : ''} Not okay: ${reason}?`)) return;
+  try { const r = await api('/api/decide', { method: 'POST', body: JSON.stringify({ ids, decision: 'reject_many', reason }) });
+        (r.ids || []).forEach(forget); toast(`${r.rejected} marked Not okay${notChanged(r.skipped)}`); picked = new Set(); } catch (e) { toast(e.message); }
+  load();
+}
+function learningBanner() {
+  const parts = (lessonsSummary || []).filter(l => l.lines && l.lines.length);
+  if (!parts.length) return '';
+  return `<div class="learn">↺ <b>Learning from your reviews:</b> ${parts.map(l => `${esc(l.page_name)}: ${l.lines.map(esc).join('; ')}`).join(' · ')}</div>`;
+}
+function restoreBar(shown) {
+  const n = shown.filter(d => picked.has(d.id)).length;
+  return `<div class="clearbar"><label><input type="checkbox" ${n && n === shown.length ? 'checked' : ''} onchange="pickAll(this.checked)"> Select all ${shown.length}</label>
+    <button ${n ? '' : 'disabled'} onclick="restorePosts()">Back to Waiting${n ? ' (' + n + ')' : ''}</button>
+    <span class="muted">Puts cleared posts back in Waiting (posts from before noon yesterday can't come back: they would clear again at midnight).</span></div>`;
+}
+async function restorePosts() {
+  const ids = visible().filter(d => picked.has(d.id)).map(d => d.id);
+  if (!ids.length) return;
+  try { const r = await api('/api/drafts?action=restore', { method: 'POST', body: JSON.stringify({ ids }) });
+        toast(`${r.restored} back in Waiting${r.skipped ? ` · ${r.skipped} too old` : ''}`); picked = new Set(); } catch (e) { toast(e.message); }
+  load();
+}
+async function withdrawPost(btn) {
+  const id = btn.closest('.post').dataset.id;
+  if (!confirm('Withdraw this approved post? It will not be published.')) return;
+  btn.disabled = true;
+  try { await api('/api/decide', { method: 'POST', body: JSON.stringify({ id, decision: 'withdraw' }) }); toast('Withdrawn: it will not be posted'); }
+  catch (e) { toast(e.message); }
+  load();
+}
+async function retryPosts() {
+  const ids = visible().filter(d => picked.has(d.id)).map(d => d.id);
+  if (!ids.length) return;
+  if (publisher.blocked && !publisher.held && !confirm('SocialPilot is still refusing posts, so these will probably fail again. Retry anyway?')) return;
+  if (publisher.held && !confirm(`SocialPilot is still unavailable: ${ids.length} post${ids.length > 1 ? 's' : ''} will wait and go out once it is back. Retry?`)) return;
+  if (!publisher.blocked && !confirm(`Retry ${ids.length} failed post${ids.length > 1 ? 's' : ''}?`)) return;
+  const unsure = visible().filter(d => picked.has(d.id) && mayExist(d.status_info || {})).length;
+  if (unsure && !confirm(`${unsure} of these may already be on Facebook (SocialPilot lost track of them, or the call broke off). Did you look on the page and they are not there?`)) return;
+  const noted = ids.filter(id => (publisher.needs_action || {})[id]).length;
+  if (noted && !confirm(`${noted} of these ${noted > 1 ? 'have red notes' : 'has a red note'} (for example a copy on the wrong SocialPilot account). Did you do what ${noted > 1 ? 'they say' : 'it says'} in SocialPilot first (delete the copy)?`)) return;
+  const captions = Object.fromEntries(ids.filter(id => edits[id] && edits[id].caption != null).map(id => [id, edits[id].caption]));
+  try { const r = await api('/api/decide', { method: 'POST', body: JSON.stringify({ ids, decision: 'retry', captions, confirmed: !!(unsure || noted) }) });
+        (r.ids || []).forEach(forget);
+        toast(`${r.retried} sent to the publisher again${(r.refused || []).length ? ` · ${r.refused.length} not retried: ${r.refused.map(x => x.why).join(', ')}` : ''}`);
+        picked = new Set(); } catch (e) { toast(e.message); }
+  load();
+}
+let picked = new Set();
+// selected posts someone else decided meanwhile: how many, and why (the server's words)
+const notChanged = (sk = []) => sk.length ? ` · ${sk.length} not changed: ${[...new Set(sk.map(x => x.why))].join('; ')}` : '';
+function pick(id, on) { on ? picked.add(id) : picked.delete(id); render(); }
+function clearBar(shown) {
+  const n = shown.filter(d => picked.has(d.id)).length;
+  return `<div class="clearbar"><label><input type="checkbox" ${n && n === shown.length ? 'checked' : ''} onchange="pickAll(this.checked)"> Select all ${shown.length}</label>
+    <button ${n ? '' : 'disabled'} onclick="clearPosts('selected')">Clear selected${n ? ' (' + n + ')' : ''}</button>
+    <select ${n ? '' : 'disabled'} onchange="rejectPicked(this)"><option value="">✗ Not okay selected…</option>${REASONS.map(r => `<option>${r}</option>`).join('')}</select>
+    <button onclick="clearPosts('old')">Clear posts waiting more than a day</button>
+    <span class="muted">Not okay teaches the routine the most. Clearing selected posts counts as a mild "not this one"; clearing by age doesn't count. At midnight (IST), posts made before noon that day that are still waiting clear automatically; evening posts stay for the next morning.</span></div>`;
+}
+function pickAll(on) { visible().forEach(d => on ? picked.add(d.id) : picked.delete(d.id)); render(); }
+async function clearPosts(which) {
+  let body;
+  if (which === 'selected') {
+    const ids = visible().filter(d => picked.has(d.id)).map(d => d.id);
+    if (!ids.length || !confirm(`Clear ${ids.length} waiting post${ids.length > 1 ? 's' : ''}?`)) return;
+    body = { ids };
+  } else {
+    const before = Math.floor(Date.now() / 1000) - 24 * 3600;
+    const n = visible().filter(d => (d.created_at_unix || 0) < before).length;
+    if (!n) return toast('No post has been waiting more than a day');
+    if (!confirm(`Clear ${n} post${n > 1 ? 's' : ''} waiting more than a day?`)) return;
+    body = { before, page: page === 'all' ? null : ((drafts.find(d => d.page_name === page) || {}).page || null) };
+  }
+  try { const r = await api('/api/drafts?action=clear', { method: 'POST', body: JSON.stringify(body) }); (r.ids || []).forEach(forget); toast(`Cleared ${r.cleared}${notChanged(r.skipped)}`); picked.clear(); }
+  catch (e) { toast(e.message); }
+  load();
+}
+function feedbackBox(e = {}) {
+  return `<details class="fb" ${e.fbOpen ? 'open' : ''} ontoggle="keep(this, 'fbOpen', this.open)"><summary><b>Feedback → regenerate</b></summary>
+    <textarea class="fbtext" oninput="keep(this, 'fb', this.value)" placeholder="What should change? e.g. 'use a photo where both faces are visible', 'headline should say LIKELY OUT', 'remove the logo'">${esc(e.fb || '')}</textarea>
+    <div class="fbrow"><label>＋ Image<input type="file" accept="image/*" onchange="pickImage(this)"></label>
+      <img class="fbprev" hidden alt="attached image"><span class="fname"></span>
+      <button class="regen" onclick="regenerate(this)">↻ Regenerate</button></div>
+    <div class="muted">The next hourly run rebuilds this post from your feedback (and image, if attached) and puts the new version in Waiting.</div></details>`;
+}
+function notes(d, info) {
+  const out = [];
+  if (d.status === 'regenerate' && (info.feedback || info.reference_image_url))
+    out.push(`<div class="note">${info.reference_image_url ? `<img src="${esc(info.reference_image_url)}" alt="attached image" onclick="zoom('${esc(info.reference_image_url)}')">` : ''}<b>Your feedback:</b> ${esc(info.feedback || '(image only)')}</div>`);
+  if (d.replaces)
+    out.push(`<div class="note">${d.previous_image_url ? `<img src="${esc(d.previous_image_url)}" alt="previous version" onclick="zoom('${esc(d.previous_image_url)}')">` : ''}<b>Regenerated from feedback:</b> ${esc(d.feedback_applied || '')}${d.changes ? `<br><span class="muted">What changed: ${esc(d.changes)}</span>` : ''}</div>`);
+  if (d.link_url)
+    out.push(`<div class="note"><b>Made from your link:</b> <a href="${esc(d.link_url)}" target="_blank" rel="noopener" style="color:var(--focus);word-break:break-all">${esc(d.link_url)}</a>${d.link_note ? `<br><span class="muted">Your note: ${esc(d.link_note)}</span>` : ''}</div>`);
+  if (d.update_of)
+    out.push(`<div class="note" style="color:var(--warn)"><b>Update to an earlier post</b> (${esc(d.update_of)}): ${esc(d.what_is_new || '')}<br><span class="muted">Approve only if this is really new; otherwise it's a repeat.</span></div>`);
+  if (d.note_to_editor)
+    out.push(`<div class="note" style="color:var(--warn)"><b>Note for you:</b> ${esc(d.note_to_editor)}</div>`);
+  if (d.lesson_override)
+    out.push(`<div class="note" style="color:var(--warn)"><b>Editors usually reject this kind of story.</b> Why the routine made it anyway: ${esc(d.lesson_override)}</div>`);
+  if (info.regen_error)
+    out.push(`<div class="note" style="color:var(--no)"><b>Couldn't regenerate:</b> ${esc(info.regen_error)}${info.feedback ? `<br><span class="muted">Feedback was: ${esc(info.feedback)}</span>` : ''}</div>`);
+  const act = (publisher.needs_action || {})[d.id];
+  if (act)
+    out.push(`<div class="note" style="color:var(--no)"><b>Needs a person:</b> ${esc(act.text)} <button onclick="actionDone('${esc(d.id)}')">Done</button></div>`);
+  if (d.status === 'failed' && mayExist(info))
+    out.push(`<div class="note" style="color:var(--no)"><b>It may already be on Facebook.</b> Look on the page before you retry it, or it could go out twice.</div>`);
+  return out.join('');
+}
+// a failure that does not prove the post is missing: SocialPilot lost track of it, or the call broke off
+const mayExist = info => !!info.check_facebook || /not delivered|interrupted|created but not|lookups? failed|error uploading media|timed? ?out|timeout/i.test(info.error || '');
+// what only a person can do in SocialPilot or on Facebook (the publisher found it), until marked done
+function needsActionBanner() {
+  const items = Object.entries(publisher.needs_action || {});
+  if (publisher.needs_action_unknown) return `<div class="banner amber">⚠ <b>The notes on posts that need a person could not be loaded just now.</b> Failed posts are not sent again until they can be checked: try again in a few minutes.</div>`;
+  if (!items.length) return '';
+  const name = id => id.replace(/^.*?-\d{12}-/, '').replace(/-/g, ' ');
+  return `<div class="banner">⛔ <b>${items.length} post${items.length > 1 ? 's need' : ' needs'} a person in SocialPilot or on Facebook:</b>
+    ${items.slice(0, 5).map(([id, x]) => `<br>${esc(x.page)} · “${esc(name(id))}”: ${esc(x.text)} <button onclick="actionDone('${esc(id)}')">Done</button>`).join('')}
+    ${items.length > 5 ? `<br>and ${items.length - 5} more (marked on each post)` : ''}</div>`;
+}
+async function actionDone(id) {
+  if (!confirm('Mark this as done? Only after you fixed it in SocialPilot or looked on Facebook.')) return;
+  try { const r = await api('/api/decide', { method: 'POST', body: JSON.stringify({ id, decision: 'done' }) }); toast('Marked done');
+        healthAt = 0; healthAfter = r.health_at || healthAfter; } catch (e) { toast(e.message); }   // its banner goes too, whichever server answers
+  load();
+}
+// the link form is not drawn again by a redraw (unsent edits on posts are: the list still refreshes)
+const drafting = () => [...document.querySelectorAll('.linkform input')].some(i => i.value.trim());
+const typing = () => document.activeElement.matches('textarea, input');
+const postOf = el => drafts.find(d => d.id === el.closest('.post').dataset.id);
+function saveEdits() { try { sessionStorage.setItem('reviewEdits', JSON.stringify(edits)); } catch (e) {} }
+// field: caption | note | reasons | fb | fbOpen; an empty value drops it
+function keep(el, field, value) {
+  const d = postOf(el); if (!d) return;
+  const e = edits[d.id] || (edits[d.id] = { st: d.status });
+  if (value === '' || value === false || value == null) delete e[field]; else e[field] = value;
+  if (!Object.keys(e).some(k => k !== 'st')) delete edits[d.id];
+  saveEdits();
+}
+function forget(id) { delete edits[id]; delete files[id]; saveEdits(); }
+function capEdit(ta) {
+  const d = postOf(ta), side = ta.closest('.side');
+  side.querySelector('.cc').textContent = ta.value.length;
+  const same = !d || ta.value === ((d.status_info || {}).caption || d.caption || '');
+  keep(ta, 'caption', same ? null : ta.value);
+  side.querySelector('.edited').hidden = same;
+}
+function undoCap(btn) {
+  const d = postOf(btn), ta = btn.closest('.side').querySelector(':scope > textarea');
+  ta.value = (d.status_info || {}).caption || d.caption || ''; capEdit(ta);
+}
+// after a load: an edit on a post someone else decided meanwhile is dropped (it can't be sent), and said so
+function prune(truncated) {
+  const gone = Object.keys(edits).filter(id => {
+    const d = drafts.find(x => x.id === id);
+    if (d) return !['pending', 'failed', 'rejected'].includes(d.status) || (d.status === 'rejected' && edits[id].caption != null);
+    return !truncated && (tab === 'all' || tab === edits[id].st);
+  });
+  gone.forEach(forget);
+  const told = gone.filter(id => refusedNow.has(id)).length; refusedNow.clear();
+  if (gone.length > told) toast(`Someone else already decided ${gone.length - told > 1 ? gone.length - told + ' posts' : 'a post'} you were editing: your edit was not sent`);
+}
+function pickImage(input) {
+  const box = input.closest('.fb'), f = input.files[0], d = postOf(input);
+  if (d) { if (f) files[d.id] = f; else delete files[d.id]; }
+  box.querySelector('.fname').textContent = f ? f.name : '';
+  const prev = box.querySelector('.fbprev');
+  if (f) { prev.src = URL.createObjectURL(f); prev.hidden = false; } else prev.hidden = true;
+}
+// Downscale to <=1600px JPEG so the upload stays well under the function body limit.
+function shrink(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', 0.9).split(',')[1]);
+    };
+    img.onerror = () => reject(new Error('could not read that image'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function regenerate(btn) {
+  const el = btn.closest('.post'), box = btn.closest('.fb');
+  const feedback = box.querySelector('.fbtext').value.trim(), file = box.querySelector('input[type=file]').files[0];
+  if (!feedback && !file) return toast('Write what should change, or attach an image');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const body = { id: el.dataset.id, feedback, caption: el.querySelector('.side > textarea').value };
+    if (file) { body.image_b64 = await shrink(file); body.image_type = 'image/jpeg'; }
+    await api('/api/feedback', { method: 'POST', body: JSON.stringify(body) });
+    forget(el.dataset.id);
+    toast('Sent · it will be regenerated in the next hourly run');
+    load();
+  } catch (e) { refusedNow.add(el.dataset.id); toast(e.message); btn.disabled = false; btn.textContent = '↻ Regenerate'; }
+}
+function linkBox() {
+  const waiting = links.filter(l => l.status === 'waiting').length;
+  const pill = l => l.status === 'done' ? ['ok', 'Post made · in Waiting'] : l.status === 'failed' ? ['no', 'Could not make a post'] : ['warn', 'Next hourly run'];
+  const opts = (myPages || []).map(p => [p.slug, p.name || p.slug]);
+  return `<div class="linkbox"><details ${linkOpen ? 'open' : ''} ontoggle="linkOpen=this.open">
+    <summary>＋ Post from a link<span class="muted">paste a news link, the next hourly run makes the post${waiting ? ` · ${waiting} waiting` : ''}</span></summary>
+    <form class="linkform" onsubmit="event.preventDefault(); addLink(this)">
+      <input name="url" type="url" required placeholder="https://… news article, X post or Reddit post">
+      <select name="page" required><option value="">Page…</option>${opts.map(([v, n]) => `<option value="${v}" ${page === n ? 'selected' : ''}>${n}</option>`).join('')}</select>
+      <input name="note" class="note" placeholder="Note for the post (optional): angle, photo to use…">
+      <button>Add link</button>
+    </form>
+    ${links.length ? `<ul class="links">${links.slice(0, 8).map(l => { const p = pill(l); return `<li>
+      <span class="pill ${p[0]}">${p[1]}</span><span class="muted">${esc(l.page_name || l.page)} · ${esc(ago(Math.floor(l.at / 1000)))}</span>
+      <a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.url)}</a>
+      ${l.status === 'failed' && l.status_info && l.status_info.error ? `<span class="why">${esc(l.status_info.error)}</span>` : ''}
+      ${l.status === 'failed' ? `<button type="button" onclick="retryLink('${esc(l.id)}')">Try again</button>` : ''}</li>`; }).join('')}</ul>` : ''}
+  </details></div>`;
+}
+async function retryLink(id) {
+  try { await api('/api/links', { method: 'POST', body: JSON.stringify({ id, action: 'retry' }) }); toast('Back in the queue · the next hourly run makes the post'); }
+  catch (e) { toast(e.message); }
+  load();
+}
+async function addLink(form) {
+  const btn = form.querySelector('button'); btn.disabled = true;
+  try {
+    await api('/api/links', { method: 'POST', body: JSON.stringify({ url: form.url.value.trim(), page: form.page.value, note: form.note.value.trim() }) });
+    toast('Link added · the post will be made in the next hourly run');
+    linkOpen = true; form.reset(); load();
+  } catch (e) { toast(e.message); btn.disabled = false; }
+}
+function render() {
+  if (!key) return loginView();
+  const pages = [...new Set(drafts.map(d => d.page_name))];
+  const shown = visible();
+  focusIdx = Math.min(focusIdx, Math.max(0, shown.length - 1));
+  // the badges count what each tab lists (whenever made); Queued includes what the publisher is scheduling
+  const counts = { ...totals, approved: (totals.approved || 0) + (totals.publishing || 0) };
+  const strip = document.querySelector('.tabs'), scrolled = strip ? strip.scrollLeft : 0;
+  const newer = stale ? `<div class="banner newver">↻ <b>A new version of the dashboard is available.</b> Reload this page to keep working: your unsent edits are kept.<button onclick="reloadPage()">Reload</button></div>` : '';
+  const empty = stale ? `<div class="empty">This page is out of date: reload it to see the posts.</div>`
+    : loading ? '<div class="empty">Loading…</div>'
+    : loadError ? `<div class="loaderr">Could not load the posts: ${loadError.storage ? 'the dashboard\'s storage is not answering just now' : 'the connection or the server did not answer'}. This is not an empty queue. Trying again in a few seconds.<button onclick="load()">Try again</button></div>`
+    : `<div class="empty">${tab === 'pending' ? 'All caught up. New posts arrive every hour.' : 'Nothing here.'}</div>`;
+  const list = stale ? [] : shown;
+  const drawn = list.map(d => d.id).join(' ');      // the posts moved under the editor's finger: see decide()
+  // (not the first posts of a load or a tab: nothing was under the finger)
+  if (drawn !== drawnIds) { if (drawnIds && drawn) drawnAt = performance.now(); drawnIds = drawn; }
+  const f = document.activeElement, fp = f && f.matches('.post textarea, .post input[type=text]') ? f.closest('.post').dataset.id : null,
+        fsel = fp && (f.classList.contains('fbtext') ? '.fbtext' : f.classList.contains('why-note') ? '.why-note' : '.side > textarea');
+  $('#app').innerHTML = `<header>${newer}<div class="bar"><h1><a href="/#/studio" style="color:inherit;text-decoration:none" title="Back to Studio">←</a> Hourly posts: approvals</h1>
+    <div class="tabs">${[['pending','Waiting'],['regenerate','Regenerating'],['approved','Queued'],['scheduled','Scheduled'],['posted','Posted'],['rejected','Not okay'],['failed','Failed'],['cleared','Cleared'],['all','All']].map(([t, l]) =>
+      `<button class="${t === tab ? 'on' : ''}" onclick="tab='${t}';focusIdx=0;load()">${l}${counts[t] ? `<span class="n">${counts[t]}</span>` : ''}</button>`).join('')}</div>
+    <div class="sort" role="group" aria-label="Sort by time created"><span>Created</span>${[['new','Newest first'],['old','Oldest first']].map(([o, l]) =>
+      `<button class="${o === order ? 'on' : ''}" aria-pressed="${o === order}" onclick="setOrder('${o}')">${l}</button>`).join('')}</div>
+    <select onchange="page=this.value;focusIdx=0;render()"><option value="all">All pages</option>${pages.map(p => `<option ${p === page ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>
+    <span class="keys"><kbd>J</kbd>/<kbd>K</kbd> move · <kbd>A</kbd> okay · <kbd>R</kbd> not okay</span></div>
+    <div class="today">${todayTiles()}</div></header>${stale ? '' : healthBox() + publisherBanner() + (tab === 'pending' ? learningBanner() : '') + linkBox()}${tab === 'pending' && list.length ? clearBar(list) : ''}${tab === 'failed' && list.length ? retryBar(list) : ''}${tab === 'cleared' && list.length ? restoreBar(list) : ''}
+    ${loadError && list.length ? `<div class="banner amber">⚠ Could not refresh the list just now, so it may be out of date. Trying again in a few seconds.<button class="again" onclick="load()">Try again</button></div>` : ''}
+    ${cut && list.length ? `<div class="learn">Showing the newest ${drafts.length} of ${cut} posts in this tab: decide or clear some to see the older ones.</div>` : ''}
+    <main>${list.length ? list.map(card).join('') : empty}</main>`;
+  // the tab strip scrolls on a phone: it stays where it was, with the chosen tab in view
+  const tabs = document.querySelector('.tabs'), on = tabs.querySelector('.on');
+  tabs.scrollLeft = scrolled;
+  const t = tabs.getBoundingClientRect(), b = on.getBoundingClientRect();
+  if (b.left < t.left) tabs.scrollLeft -= t.left - b.left + 8; else if (b.right > t.right) tabs.scrollLeft += b.right - t.right + 8;
+  // the field the editor was typing in keeps the focus and the cursor
+  const back = fp && document.querySelector(`.post[data-id="${CSS.escape(fp)}"] ${fsel}`);
+  if (back) { const { selectionStart: a, selectionEnd: b, scrollTop: t } = f; back.focus({ preventScroll: true }); back.setSelectionRange(a, b); back.scrollTop = t; }
+  // an attached feedback image goes back in its box
+  for (const [id, f] of Object.entries(files)) {
+    const input = document.querySelector(`.post[data-id="${CSS.escape(id)}"] .fb input[type=file]`);
+    if (!input) continue;
+    const dt = new DataTransfer(); dt.items.add(f); input.files = dt.files; pickImage(input);
+  }
+}
+function reloadPage() {
+  if (Object.keys(files).length && !confirm('An image you attached for feedback is not kept over a reload: you will need to attach it again. Reload now?')) return;
+  location.reload();
+}
+// a deploy while this page is open: its code is out of date, so it stops showing and sending
+// anything and asks for a reload (public/version.json, written by deploy.sh; none locally)
+async function checkVersion() {
+  if (stale || Date.now() - versionAt < 50e3) return;
+  versionAt = Date.now();
+  try {
+    const r = await fetch('/version.json?t=' + Date.now(), { cache: 'no-store' });
+    const v = r.ok ? (await r.json()).commit : '';
+    if (!v) return;
+    if (version === null) version = v;
+    else if (v !== version) { stale = true; render(); }
+  } catch (e) {}
+}
+const visible = () => drafts.filter(d => page === 'all' || d.page_name === page)
+  .sort((a, b) => order === 'old' ? (a.created_at_unix || 0) - (b.created_at_unix || 0) : (b.created_at_unix || 0) - (a.created_at_unix || 0));
+function setOrder(o) { order = o; focusIdx = 0; try { localStorage.setItem('dashOrder', o); } catch (e) {} render(); }
+function fullTime(t) { return t ? new Date(t * 1000).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'unknown'; }
+function ago(t) {
+  if (!t) return '';
+  const m = Math.max(0, Math.round((Date.now() / 1000 - t) / 60));
+  if (m < 1) return 'just now';
+  if (m < 60) return m + ' min ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ' + (m % 60 ? (m % 60) + 'm ' : '') + 'ago';
+  const d = Math.floor(h / 24);
+  return d + (d === 1 ? ' day' : ' days') + ' ago';
+}
+// the start of today in New York (unix seconds): the day the routine counts against the daily cap
+function nyMidnight(now = Date.now()) {
+  const clock = t => { const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', hour: 'numeric', minute: 'numeric', second: 'numeric' })
+    .formatToParts(new Date(t * 1000)).map(x => [x.type, Number(x.value)])); return (p.hour * 60 + p.minute) * 60 + p.second; };
+  const guess = Math.floor(now / 1000) - clock(Math.floor(now / 1000));
+  const off = clock(guess);         // the day the clocks change, the guess is an hour from midnight
+  return off > 12 * 3600 ? guess + 24 * 3600 - off : guess - off;
+}
+// another tab chosen: "Loading…" until its posts come, never the last tab's posts (nor, if they
+// do not come, "All caught up"); a failed load is tried again in 10 s
+async function load() {
+  if (!key) return render();
+  loadHealth(); checkVersion();
+  if (stale) return render();
+  const seq = ++loadSeq, want = tab;
+  if (want !== loadedTab) { drafts = []; loading = true; loadError = false; render(); }
+  try {
+    const [d, s, l] = await Promise.all([api('/api/drafts?status=' + want), api('/api/stats?since=' + nyMidnight()),
+      api('/api/links').catch(() => ({ links: [] })), myPages ? null : api('/api/auth/me').then(r => { myPages = r.pages || []; }).catch(() => {})]);
+    if (seq !== loadSeq) return;
+    drafts = d.drafts; stats = s.counts || {}; totals = s.totals || {}; publisher = s.publisher || {}; lessonsSummary = s.lessons || []; links = l.links || [];
+    loadedTab = want; loadError = false; clearTimeout(retryT); cut = d.truncated ? d.total : 0;
+    prune(d.truncated);
+  } catch (e) {
+    if (seq !== loadSeq) return;
+    loadError = { storage: e.status === 503 && e.said };   // (not storage's "try again in a few minutes": this tries again itself)
+    clearTimeout(retryT); retryT = setTimeout(retryLoad, 10e3);
+  }
+  loading = false;
+  render();
+}
+// a failed load tried again, never while the editor types (a redraw would take the focus away, and
+// the next letters typed would be shortcuts: A approves)
+function retryLoad() { clearTimeout(retryT); if (typing()) retryT = setTimeout(retryLoad, 10e3); else load(); }
+function toggleReasons(btn) { keep(btn, 'reasons', btn.closest('.side').querySelector('.reasons').classList.toggle('show')); }
+async function decide(btn, decision, reason) {
+  // a tap just after the list moved (the post decided a moment ago left it, or a refresh), or just
+  // after a decision (its redraw may come before the second tap), was meant for the post that was
+  // there: the next post's button is in the same spot, so it is not taken, and the editor is told
+  const now = performance.now();
+  if (now - drawnAt < 800 || now - decidedAt < 1500) return toast('The list just changed: check this post, then tap again');
+  const el = btn.closest('.post'); const id = el.dataset.id;
+  const caption = el.querySelector('.side > textarea').value;
+  if (decision === 'approve' && !written(caption)) return toast('The caption is empty: write one, or Undo your edit');
+  if (decision === 'approve' && publisher.blocked && !publisher.held && !confirm((publisher.locked ? 'The SocialPilot account is locked' : 'SocialPilot is refusing posts') + ', so this post will fail and you will need to retry it later from the Failed tab. Approve anyway?')) return;
+  const d = drafts.find(x => x.id === id) || {};
+  const unsure = decision === 'approve' && d.status === 'failed' && mayExist(d.status_info || {});
+  if (unsure && !confirm('This post may already be on Facebook (SocialPilot lost track of it, or the call broke off). Did you look on the page and it is not there?')) return;
+  const noted = decision === 'approve' && d.status === 'failed' && !!(publisher.needs_action || {})[id];
+  if (noted && !confirm('This post has a red note (for example a copy on the wrong SocialPilot account). Did you do what it says in SocialPilot first (delete the copy)?')) return;
+  const confirmed = unsure || noted;
+  const note = decision === 'reject' ? (el.querySelector('.why-note')?.value || '').trim() : '';
+  el.querySelectorAll('button').forEach(b => b.disabled = true);
+  decidedAt = performance.now();
+  const online = navigator.onLine;     // false: the request cannot have reached the server
+  try {
+    const r = await api('/api/decide', { method: 'POST', body: JSON.stringify({ id, decision, caption, reason, note, confirmed }) });
+    forget(id);
+    toast(decision === 'reject' ? 'Marked not okay' : r.status === 'failed' ? 'Approved, but publishing failed' : publisher.held ? 'Approved · waiting for SocialPilot: it goes out once SocialPilot is back' : r.queued ? (r.result && r.result.fired === false ? 'Approved · the publisher picks it up at its next run (by :35 past the hour)' : 'Approved · will be scheduled at least 1 hour out') : 'Approved and sent to SocialPilot');
+  } catch (e) {
+    refusedNow.add(id);
+    // the answer was lost on the way: it may have gone through, the list (reloaded) says
+    toast(e.offline && !online ? 'No connection: nothing was sent, try again once you are back online'
+      : e.offline ? `Connection lost: it may have been ${decision === 'reject' ? 'marked Not okay' : 'approved'}, see the list once you are back online` : e.message);
+  }
+  load();
+}
+function copyCap(b) { navigator.clipboard.writeText(b.closest('.side').querySelector(':scope > textarea').value).then(() => toast('Caption copied')); }
+function zoom(u) { $('#zoomimg').src = u; $('#zoom').showModal(); }
+document.addEventListener('keydown', e => {
+  if (!key || e.target.matches('textarea, input, select') || e.metaKey || e.ctrlKey) return;
+  const posts = [...document.querySelectorAll('.post')]; if (!posts.length) return;
+  if (e.key === 'j' || e.key === 'k') { focusIdx = Math.max(0, Math.min(posts.length - 1, focusIdx + (e.key === 'j' ? 1 : -1))); render(); document.querySelector('.post.focus')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  const cur = posts[focusIdx]; if (!cur) return;
+  if (e.key === 'a') cur.querySelector('.okay')?.click();
+  if (e.key === 'r') cur.querySelector('.notokay')?.click();
+});
+load(); setInterval(() => { if (document.visibilityState === 'visible' && !typing() && !drafting()) load(); }, 60000);
+setInterval(checkVersion, 60000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkVersion(); });
+addEventListener('online', () => { if (loadError) retryLoad(); });
+</script>
+</body>
+</html>

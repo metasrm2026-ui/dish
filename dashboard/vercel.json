@@ -1,0 +1,11 @@
+{
+  "functions": { "api/main.js": { "maxDuration": 60 } },
+  "rewrites": [{ "source": "/api/:path*", "destination": "/api/main?route=:path*" }],
+  "headers": [{ "source": "/(index.html|review.html|app.js|app.css|version.json)?", "headers": [
+    { "key": "Cache-Control", "value": "no-cache" } ] },
+    { "source": "/(.*)", "headers": [
+    { "key": "X-Robots-Tag", "value": "noindex" },
+    { "key": "X-Frame-Options", "value": "DENY" },
+    { "key": "Referrer-Policy", "value": "same-origin" }
+  ] }]
+}

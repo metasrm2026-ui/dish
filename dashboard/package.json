@@ -1,0 +1,15 @@
+{
+  "name": "bore-dashboard",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@vercel/blob": "^1.0.0",
+    "unpdf": "^1.8.1"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

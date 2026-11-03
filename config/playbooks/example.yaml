@@ -1,0 +1,32 @@
+# Example playbook (dummy data). Real playbooks are not in the repository: admins keep them in
+# the dashboard's encrypted store and the routines pull them into private/playbooks/ with
+# `python -m bore.cli studio sync`. Copy this shape when setting one up.
+page: example-page
+name: Example Page
+niche: >
+  Dummy sports news for tests and local development.
+audience: Fans of a made-up league.
+worth_posting: >
+  Signings, injuries and results from the made-up league. Score 0-10 for niche fit.
+prefilter:
+  skip: ['(?i)\bhappy birthday\b']
+  boost: ['(?i)\b(signs?|signed|injur(y|ed))\b']
+  trade_only_sources: []
+voice: >
+  Short, direct, friendly.
+lint:
+  hashtags: {min: 2, max: 4, required: "#Example"}
+  closing_question: true
+logo_words: [EXAMPLE]
+caption_rules:
+  - State the news in the first line.
+  - End with a question to fans.
+examples:
+  - |
+    Example Club have signed a new striker on a two-year deal.
+
+    Good business? 👇
+    #Example #Football
+card:
+  templates: [headline, stat_card]
+  default_template: headline

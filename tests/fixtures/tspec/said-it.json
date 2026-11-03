@@ -1,0 +1,25 @@
+{
+  "id": "said-it",
+  "name": "Said It",
+  "use_when": "A made-up test template: a quotation in boxed lines under a photo, with who said it.",
+  "visual_lane": "editorial",
+  "background": {"fill": "bg", "texture": "worn"},
+  "photos": [
+    {"box": [0, 0, 1, 0.56], "focus": [0.5, 0.45],
+     "shade": [{"edge": "bottom", "size": 0.3, "color": "bg"}]}
+  ],
+  "text": [
+    {"text": "ON THE RECORD", "box": [0.05, 0.025, 0.42, 0.05], "alt_box": [0.05, 0.5, 0.42, 0.05],
+     "font": "condensed", "size": [20, 34], "max_lines": 1, "valign": "middle", "plate": "accent"},
+    {"slot": "quote", "box": [0.06, 0.58, 0.88, 0.27], "font": "display", "size": [40, 92], "max_lines": 4,
+     "plate": {"color": "ink", "style": "lines", "pad": [2, 14]}, "highlight": "accent"},
+    {"slot": "speaker", "box": [0.06, 0.87, 0.58, 0.06], "font": "condensed", "size": [24, 44], "max_lines": 1,
+     "color": "accent", "valign": "middle"}
+  ],
+  "logo": {"box": [0.66, 0.88, 0.3, 0.05], "color": "ink/80"},
+  "slots": {
+    "quote": {"type": "text", "max_words": 15, "max_chars": 90, "hint": "the words exactly as said",
+              "examples": [["WE WERE NOT", "READY FOR THAT"]]},
+    "speaker": {"type": "text", "max_words": 4, "max_chars": 30, "examples": ["THE HEAD COACH"]}
+  }
+}

@@ -1,0 +1,809 @@
+{
+ "_note": "SYNTHETIC regression fixture encoding the failure modes from the build brief. Replace/extend with real labelled windows via `bore capture-fixture`. Includes an injury-report day (12 posts sharing 'injury report Thursday practice' about different players) so generic terms carry little weight, as in a real window.",
+ "page": {
+  "slug": "fixture",
+  "name": "Fixture",
+  "tier_one": [
+   "adamschefter",
+   "jeffpassan"
+  ],
+  "officials": [
+   "mlb",
+   "nfl"
+  ]
+ },
+ "stories": [
+  {
+   "name": "Hurts ruled out, McKee starts",
+   "items": [
+    "qa1",
+    "qa2",
+    "qa3",
+    "qa4"
+   ]
+  },
+  {
+   "name": "Young benched, Dalton starts",
+   "items": [
+    "qb1",
+    "qb2"
+   ]
+  },
+  {
+   "name": "tiny post 1",
+   "items": [
+    "pl1"
+   ]
+  },
+  {
+   "name": "tiny post 2",
+   "items": [
+    "pl2"
+   ]
+  },
+  {
+   "name": "Ohtani extension scoop",
+   "items": [
+    "sc1"
+   ],
+   "single_source_major": true
+  },
+  {
+   "name": "Yankees vs Red Sox",
+   "items": [
+    "g0a",
+    "g0b"
+   ]
+  },
+  {
+   "name": "Dodgers vs Padres",
+   "items": [
+    "g1a",
+    "g1b"
+   ]
+  },
+  {
+   "name": "Mets vs Braves",
+   "items": [
+    "g2a",
+    "g2b"
+   ]
+  },
+  {
+   "name": "Rashee Rice trade",
+   "items": [
+    "bp1",
+    "bp2",
+    "bp3",
+    "bp4",
+    "rd3"
+   ]
+  },
+  {
+   "name": "injury report inj1",
+   "items": [
+    "inj1"
+   ]
+  },
+  {
+   "name": "injury report inj2",
+   "items": [
+    "inj2"
+   ]
+  },
+  {
+   "name": "injury report inj3",
+   "items": [
+    "inj3"
+   ]
+  },
+  {
+   "name": "injury report inj4",
+   "items": [
+    "inj4"
+   ]
+  },
+  {
+   "name": "injury report inj5",
+   "items": [
+    "inj5"
+   ]
+  },
+  {
+   "name": "injury report inj6",
+   "items": [
+    "inj6"
+   ]
+  },
+  {
+   "name": "injury report inj7",
+   "items": [
+    "inj7"
+   ]
+  },
+  {
+   "name": "injury report inj8",
+   "items": [
+    "inj8"
+   ]
+  },
+  {
+   "name": "injury report inj9",
+   "items": [
+    "inj9"
+   ]
+  },
+  {
+   "name": "injury report inj10",
+   "items": [
+    "inj10"
+   ]
+  },
+  {
+   "name": "injury report inj11",
+   "items": [
+    "inj11"
+   ]
+  },
+  {
+   "name": "injury report inj12",
+   "items": [
+    "inj12"
+   ]
+  },
+  {
+   "name": "Zay Flowers hamstring",
+   "items": [
+    "zi1",
+    "zi2"
+   ]
+  },
+  {
+   "name": "Mark Andrews ankle",
+   "items": [
+    "ma1",
+    "ma2"
+   ]
+  }
+ ],
+ "items": [
+  {
+   "id": "qa1",
+   "platform": "x",
+   "author": "adamschefter",
+   "text": "Eagles QB Jalen Hurts ruled out for Sunday with a knee sprain. Tanner McKee will start.",
+   "engagement": 250000,
+   "age_hours": 3,
+   "url": "https://x.com/adamschefter/status/qa1"
+  },
+  {
+   "id": "qa2",
+   "platform": "x",
+   "author": "eaglesbeat",
+   "text": "Eagles QB Jalen Hurts ruled out for Sunday with a knee sprain. Tanner McKee will start.",
+   "engagement": 0,
+   "age_hours": 2.9,
+   "url": "https://x.com/eaglesbeat/status/qa2",
+   "is_repost": true,
+   "original_author": "adamschefter"
+  },
+  {
+   "id": "qa3",
+   "platform": "x",
+   "author": "phillybeatwriter",
+   "text": "Hurts out Sunday, knee sprain. McKee gets the start for the Eagles",
+   "engagement": 4200,
+   "age_hours": 2.5,
+   "url": "https://x.com/phillybeatwriter/status/qa3"
+  },
+  {
+   "id": "qa4",
+   "platform": "x",
+   "author": "nfl_insider2",
+   "text": "Tanner McKee starting at QB for the Eagles with Jalen Hurts ruled out (knee)",
+   "engagement": 9000,
+   "age_hours": 2.0,
+   "url": "https://x.com/nfl_insider2/status/qa4"
+  },
+  {
+   "id": "qb1",
+   "platform": "x",
+   "author": "panthersbeat",
+   "text": "Panthers bench Bryce Young; Andy Dalton named starting quarterback for Sunday",
+   "engagement": 8000,
+   "age_hours": 4,
+   "url": "https://x.com/panthersbeat/status/qb1"
+  },
+  {
+   "id": "qb2",
+   "platform": "x",
+   "author": "carolinareporter",
+   "text": "Andy Dalton will start at quarterback for Carolina after Bryce Young was benched",
+   "engagement": 5100,
+   "age_hours": 3.5,
+   "url": "https://x.com/carolinareporter/status/qb2"
+  },
+  {
+   "id": "bridge",
+   "platform": "x",
+   "author": "nflmemes",
+   "text": "QB changes everywhere Sunday: Hurts out, McKee starts; Young benched, Dalton starting quarterback",
+   "engagement": 300,
+   "age_hours": 2,
+   "url": "https://x.com/nflmemes/status/bridge"
+  },
+  {
+   "id": "zi1",
+   "platform": "x",
+   "author": "ravensbeat",
+   "text": "Ravens injury report: Zay Flowers (hamstring) limited in practice Thursday",
+   "engagement": 1500,
+   "age_hours": 5,
+   "url": "https://x.com/ravensbeat/status/zi1"
+  },
+  {
+   "id": "zi2",
+   "platform": "x",
+   "author": "ravensinsider",
+   "text": "Zay Flowers limited again Thursday with the hamstring, per Ravens injury report",
+   "engagement": 900,
+   "age_hours": 4.5,
+   "url": "https://x.com/ravensinsider/status/zi2"
+  },
+  {
+   "id": "ma1",
+   "platform": "x",
+   "author": "ravensbeat2",
+   "text": "Ravens injury report: Mark Andrews (ankle) did not practice Thursday",
+   "engagement": 1400,
+   "age_hours": 5,
+   "url": "https://x.com/ravensbeat2/status/ma1"
+  },
+  {
+   "id": "ma2",
+   "platform": "x",
+   "author": "baltimorewriter",
+   "text": "Mark Andrews missed Thursday practice with the ankle injury, Ravens injury report says",
+   "engagement": 800,
+   "age_hours": 4,
+   "url": "https://x.com/baltimorewriter/status/ma2"
+  },
+  {
+   "id": "pl1",
+   "platform": "x",
+   "author": "fanacct1",
+   "text": "Please Bills fans, calm down",
+   "engagement": 20,
+   "age_hours": 1,
+   "url": "https://x.com/fanacct1/status/pl1"
+  },
+  {
+   "id": "pl2",
+   "platform": "x",
+   "author": "fanacct2",
+   "text": "please Bills win tonight",
+   "engagement": 15,
+   "age_hours": 1,
+   "url": "https://x.com/fanacct2/status/pl2"
+  },
+  {
+   "id": "sc1",
+   "platform": "x",
+   "author": "jeffpassan",
+   "text": "Sources: Dodgers and Shohei Ohtani agree to a record 10-year extension worth $800 million",
+   "engagement": 310000,
+   "age_hours": 1.5,
+   "url": "https://x.com/jeffpassan/status/sc1"
+  },
+  {
+   "id": "mlb0",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 0 tonight in the Bronx number 0",
+   "engagement": 20000,
+   "age_hours": 1.0,
+   "url": "https://x.com/mlb/status/mlb0"
+  },
+  {
+   "id": "mlb1",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 1 tonight in the Queens number 1",
+   "engagement": 20000,
+   "age_hours": 1.2,
+   "url": "https://x.com/mlb/status/mlb1"
+  },
+  {
+   "id": "mlb2",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 2 tonight in the Bay number 2",
+   "engagement": 20000,
+   "age_hours": 1.4,
+   "url": "https://x.com/mlb/status/mlb2"
+  },
+  {
+   "id": "mlb3",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 3 tonight in the Loop number 3",
+   "engagement": 20000,
+   "age_hours": 1.6,
+   "url": "https://x.com/mlb/status/mlb3"
+  },
+  {
+   "id": "mlb4",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 4 tonight in the Valley number 4",
+   "engagement": 20000,
+   "age_hours": 1.8,
+   "url": "https://x.com/mlb/status/mlb4"
+  },
+  {
+   "id": "mlb5",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 5 tonight in the Bronx number 5",
+   "engagement": 20000,
+   "age_hours": 2.0,
+   "url": "https://x.com/mlb/status/mlb5"
+  },
+  {
+   "id": "mlb6",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 6 tonight in the Queens number 6",
+   "engagement": 20000,
+   "age_hours": 2.2,
+   "url": "https://x.com/mlb/status/mlb6"
+  },
+  {
+   "id": "mlb7",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 7 tonight in the Bay number 7",
+   "engagement": 20000,
+   "age_hours": 2.4000000000000004,
+   "url": "https://x.com/mlb/status/mlb7"
+  },
+  {
+   "id": "mlb8",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 8 tonight in the Loop number 8",
+   "engagement": 20000,
+   "age_hours": 2.6,
+   "url": "https://x.com/mlb/status/mlb8"
+  },
+  {
+   "id": "mlb9",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 9 tonight in the Valley number 9",
+   "engagement": 20000,
+   "age_hours": 2.8,
+   "url": "https://x.com/mlb/status/mlb9"
+  },
+  {
+   "id": "mlb10",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 10 tonight in the Bronx number 10",
+   "engagement": 20000,
+   "age_hours": 3.0,
+   "url": "https://x.com/mlb/status/mlb10"
+  },
+  {
+   "id": "mlb11",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 11 tonight in the Queens number 11",
+   "engagement": 20000,
+   "age_hours": 3.2,
+   "url": "https://x.com/mlb/status/mlb11"
+  },
+  {
+   "id": "mlb12",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 12 tonight in the Bay number 12",
+   "engagement": 20000,
+   "age_hours": 3.4000000000000004,
+   "url": "https://x.com/mlb/status/mlb12"
+  },
+  {
+   "id": "mlb13",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 13 tonight in the Loop number 13",
+   "engagement": 20000,
+   "age_hours": 3.6,
+   "url": "https://x.com/mlb/status/mlb13"
+  },
+  {
+   "id": "mlb14",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 14 tonight in the Valley number 14",
+   "engagement": 20000,
+   "age_hours": 3.8000000000000003,
+   "url": "https://x.com/mlb/status/mlb14"
+  },
+  {
+   "id": "mlb15",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 15 tonight in the Bronx number 15",
+   "engagement": 20000,
+   "age_hours": 4.0,
+   "url": "https://x.com/mlb/status/mlb15"
+  },
+  {
+   "id": "mlb16",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 16 tonight in the Queens number 16",
+   "engagement": 20000,
+   "age_hours": 4.2,
+   "url": "https://x.com/mlb/status/mlb16"
+  },
+  {
+   "id": "mlb17",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 17 tonight in the Bay number 17",
+   "engagement": 20000,
+   "age_hours": 4.4,
+   "url": "https://x.com/mlb/status/mlb17"
+  },
+  {
+   "id": "mlb18",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 18 tonight in the Loop number 18",
+   "engagement": 20000,
+   "age_hours": 4.6,
+   "url": "https://x.com/mlb/status/mlb18"
+  },
+  {
+   "id": "mlb19",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 19 tonight in the Valley number 19",
+   "engagement": 20000,
+   "age_hours": 4.800000000000001,
+   "url": "https://x.com/mlb/status/mlb19"
+  },
+  {
+   "id": "mlb20",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 20 tonight in the Bronx number 20",
+   "engagement": 20000,
+   "age_hours": 5.0,
+   "url": "https://x.com/mlb/status/mlb20"
+  },
+  {
+   "id": "mlb21",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 21 tonight in the Queens number 21",
+   "engagement": 20000,
+   "age_hours": 5.2,
+   "url": "https://x.com/mlb/status/mlb21"
+  },
+  {
+   "id": "mlb22",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 22 tonight in the Bay number 22",
+   "engagement": 20000,
+   "age_hours": 5.4,
+   "url": "https://x.com/mlb/status/mlb22"
+  },
+  {
+   "id": "mlb23",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 23 tonight in the Loop number 23",
+   "engagement": 20000,
+   "age_hours": 5.6000000000000005,
+   "url": "https://x.com/mlb/status/mlb23"
+  },
+  {
+   "id": "mlb24",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 24 tonight in the Valley number 24",
+   "engagement": 20000,
+   "age_hours": 5.800000000000001,
+   "url": "https://x.com/mlb/status/mlb24"
+  },
+  {
+   "id": "mlb25",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 25 tonight in the Bronx number 25",
+   "engagement": 20000,
+   "age_hours": 6.0,
+   "url": "https://x.com/mlb/status/mlb25"
+  },
+  {
+   "id": "mlb26",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 26 tonight in the Queens number 26",
+   "engagement": 20000,
+   "age_hours": 6.2,
+   "url": "https://x.com/mlb/status/mlb26"
+  },
+  {
+   "id": "mlb27",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 27 tonight in the Bay number 27",
+   "engagement": 20000,
+   "age_hours": 6.4,
+   "url": "https://x.com/mlb/status/mlb27"
+  },
+  {
+   "id": "mlb28",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 28 tonight in the Loop number 28",
+   "engagement": 20000,
+   "age_hours": 6.6000000000000005,
+   "url": "https://x.com/mlb/status/mlb28"
+  },
+  {
+   "id": "mlb29",
+   "platform": "x",
+   "author": "mlb",
+   "text": "Highlight: watch this play from game 29 tonight in the Valley number 29",
+   "engagement": 20000,
+   "age_hours": 6.800000000000001,
+   "url": "https://x.com/mlb/status/mlb29"
+  },
+  {
+   "id": "g0a",
+   "platform": "x",
+   "author": "yankeesbeat",
+   "text": "Yankees beat the Red Sox 5-3 on a walk-off homer by Aaron Judge",
+   "engagement": 3000,
+   "age_hours": 6,
+   "url": "https://x.com/yankeesbeat/status/g0a"
+  },
+  {
+   "id": "g0b",
+   "platform": "x",
+   "author": "yankeeswriter",
+   "text": "Aaron Judge walk-off homer lifts the Yankees past the Red Sox",
+   "engagement": 2500,
+   "age_hours": 5.5,
+   "url": "https://x.com/yankeeswriter/status/g0b"
+  },
+  {
+   "id": "g1a",
+   "platform": "x",
+   "author": "dodgersbeat",
+   "text": "Dodgers beat the Padres 5-3 on a walk-off homer by Freddie Freeman",
+   "engagement": 3000,
+   "age_hours": 6,
+   "url": "https://x.com/dodgersbeat/status/g1a"
+  },
+  {
+   "id": "g1b",
+   "platform": "x",
+   "author": "dodgerswriter",
+   "text": "Freddie Freeman walk-off homer lifts the Dodgers past the Padres",
+   "engagement": 2500,
+   "age_hours": 5.5,
+   "url": "https://x.com/dodgerswriter/status/g1b"
+  },
+  {
+   "id": "g2a",
+   "platform": "x",
+   "author": "metsbeat",
+   "text": "Mets beat the Braves 5-3 on a walk-off homer by Pete Alonso",
+   "engagement": 3000,
+   "age_hours": 6,
+   "url": "https://x.com/metsbeat/status/g2a"
+  },
+  {
+   "id": "g2b",
+   "platform": "x",
+   "author": "metswriter",
+   "text": "Pete Alonso walk-off homer lifts the Mets past the Braves",
+   "engagement": 2500,
+   "age_hours": 5.5,
+   "url": "https://x.com/metswriter/status/g2b"
+  },
+  {
+   "id": "bp1",
+   "platform": "x",
+   "author": "nflnetwork_rep",
+   "text": "BREAKING: The Chiefs have traded star wide receiver Rashee Rice to the Jets for a 2027 first-round pick and a fifth, league sources confirm; Kansas City clears cap space",
+   "engagement": 120000,
+   "age_hours": 2,
+   "url": "https://x.com/nflnetwork_rep/status/bp1"
+  },
+  {
+   "id": "bp2",
+   "platform": "x",
+   "author": "jetsbeat",
+   "text": "Rashee Rice traded to the Jets",
+   "engagement": 6000,
+   "age_hours": 1.8,
+   "url": "https://x.com/jetsbeat/status/bp2"
+  },
+  {
+   "id": "bp3",
+   "platform": "x",
+   "author": "kcbeat",
+   "text": "Chiefs trade Rashee Rice for a first",
+   "engagement": 5000,
+   "age_hours": 1.7,
+   "url": "https://x.com/kcbeat/status/bp3"
+  },
+  {
+   "id": "bp4",
+   "platform": "x",
+   "author": "nyjwriter",
+   "text": "Rice to New York Jets, first-round pick going back to Kansas City",
+   "engagement": 3000,
+   "age_hours": 1.5,
+   "url": "https://x.com/nyjwriter/status/bp4"
+  },
+  {
+   "id": "rd1",
+   "platform": "reddit",
+   "author": "reddituser1",
+   "text": "",
+   "engagement": 900,
+   "age_hours": 3,
+   "url": "https://reddit.com/r/nfl/1",
+   "title": "Game Thread: Chiefs @ Jets",
+   "subreddit": "nfl"
+  },
+  {
+   "id": "rd2",
+   "platform": "reddit",
+   "author": "reddituser2",
+   "text": "",
+   "engagement": 800,
+   "age_hours": 2,
+   "url": "https://reddit.com/r/nfl/2",
+   "title": "Daily Discussion Thread - Thursday",
+   "subreddit": "nfl"
+  },
+  {
+   "id": "rd3",
+   "platform": "reddit",
+   "author": "reddituser3",
+   "text": "",
+   "engagement": 4000,
+   "age_hours": 1.6,
+   "url": "https://reddit.com/r/nfl/3",
+   "title": "[Schefter] Chiefs trading WR Rashee Rice to the Jets for a first-round pick",
+   "subreddit": "nfl"
+  },
+  {
+   "id": "old1",
+   "platform": "x",
+   "author": "oldacct",
+   "text": "Old news: Chiefs trade Rashee Rice to the Jets",
+   "engagement": 50000,
+   "age_hours": 30,
+   "url": "https://x.com/oldacct/status/old1"
+  },
+  {
+   "id": "inj1",
+   "platform": "x",
+   "author": "bengalsbeat",
+   "text": "Bengals injury report: Ja'Marr Chase (hip) limited in practice Thursday",
+   "engagement": 300,
+   "age_hours": 5,
+   "url": "https://x.com/bengalsbeat/status/inj1"
+  },
+  {
+   "id": "inj2",
+   "platform": "x",
+   "author": "chiefsbeat",
+   "text": "Chiefs injury report: Travis Kelce did not practice Thursday, rest day",
+   "engagement": 350,
+   "age_hours": 5,
+   "url": "https://x.com/chiefsbeat/status/inj2"
+  },
+  {
+   "id": "inj3",
+   "platform": "x",
+   "author": "billsbeat",
+   "text": "Bills injury report: Josh Allen full participant in practice Thursday (shoulder)",
+   "engagement": 400,
+   "age_hours": 5,
+   "url": "https://x.com/billsbeat/status/inj3"
+  },
+  {
+   "id": "inj4",
+   "platform": "x",
+   "author": "lionsbeat",
+   "text": "Lions injury report: Amon-Ra St. Brown (ankle) limited at practice Thursday",
+   "engagement": 450,
+   "age_hours": 5,
+   "url": "https://x.com/lionsbeat/status/inj4"
+  },
+  {
+   "id": "inj5",
+   "platform": "x",
+   "author": "cowboysbeat",
+   "text": "Cowboys injury report Thursday: CeeDee Lamb did not practice with a groin injury",
+   "engagement": 500,
+   "age_hours": 5,
+   "url": "https://x.com/cowboysbeat/status/inj5"
+  },
+  {
+   "id": "inj6",
+   "platform": "x",
+   "author": "ninersbeat",
+   "text": "49ers injury report: Christian McCaffrey limited in practice Thursday with calf tightness",
+   "engagement": 550,
+   "age_hours": 5,
+   "url": "https://x.com/ninersbeat/status/inj6"
+  },
+  {
+   "id": "inj7",
+   "platform": "x",
+   "author": "packersbeat",
+   "text": "Packers injury report: Jordan Love (knee) full practice Thursday",
+   "engagement": 600,
+   "age_hours": 5,
+   "url": "https://x.com/packersbeat/status/inj7"
+  },
+  {
+   "id": "inj8",
+   "platform": "x",
+   "author": "steelersbeat",
+   "text": "Steelers injury report Thursday: T.J. Watt did not practice (hamstring)",
+   "engagement": 650,
+   "age_hours": 5,
+   "url": "https://x.com/steelersbeat/status/inj8"
+  },
+  {
+   "id": "inj9",
+   "platform": "x",
+   "author": "dolphinsbeat",
+   "text": "Dolphins injury report: Tyreek Hill limited in Thursday practice with a wrist injury",
+   "engagement": 700,
+   "age_hours": 5,
+   "url": "https://x.com/dolphinsbeat/status/inj9"
+  },
+  {
+   "id": "inj10",
+   "platform": "x",
+   "author": "vikingsbeat",
+   "text": "Vikings injury report: Justin Jefferson did not practice Thursday (hamstring)",
+   "engagement": 750,
+   "age_hours": 5,
+   "url": "https://x.com/vikingsbeat/status/inj10"
+  },
+  {
+   "id": "inj11",
+   "platform": "x",
+   "author": "texansbeat",
+   "text": "Texans injury report: C.J. Stroud limited in practice Thursday, ankle",
+   "engagement": 800,
+   "age_hours": 5,
+   "url": "https://x.com/texansbeat/status/inj11"
+  },
+  {
+   "id": "inj12",
+   "platform": "x",
+   "author": "jetsbeat2",
+   "text": "Jets injury report Thursday: Garrett Wilson (back) did not practice",
+   "engagement": 850,
+   "age_hours": 5,
+   "url": "https://x.com/brownsbeat/status/inj12"
+  }
+ ]
+}
