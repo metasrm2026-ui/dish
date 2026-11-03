@@ -21,6 +21,7 @@ DASH = Path(__file__).resolve().parent.parent / "dashboard"
 PW = "dev password 123"
 ROUTINE = "dev-routine"          # dev/server.mjs's routine secret (never a real one)
 SLUG = "dummy-sports"            # dev/server.mjs's page
+WS = "demo-workspace"            # and its workspace (the tester's)
 # the page's own requests answered late: window.__slow = [[part of the path, ms]]
 SLOW = """() => { window.__slow = []; const real = window.fetch;
   window.fetch = async (u, o) => { const r = window.__slow.find(x => String(u).includes(x[0]));
@@ -66,7 +67,8 @@ def server():
 def browser():
     with sync_api.sync_playwright() as p:
         try:
-            b = p.chromium.launch()
+            from bore.cards import _chrome_path
+            b = p.chromium.launch(**({"executable_path": _chrome_path()} if _chrome_path() else {}))
         except Exception as e:
             pytest.skip(f"no headless Chromium here: {e}")
         yield b
@@ -131,39 +133,42 @@ def invite(t, email, **extra):
 def test_page_settings_send_only_what_this_admin_changed_and_show_what_is_stored(server, browser):
     a, b = Tab(browser, server), Tab(browser, server)
     a.go(f"#/admin/page/{SLUG}", "#set")
-    # the other tab moves the page to another SocialPilot account and renames it
-    b.call("PATCH", f"/api/admin/pages/{SLUG}", {"socialpilot_login_id": "777", "name": "Dummy Sports HQ"})
+    assert a.page.locator("#set [name=socialpilot_login_id]").count() == 0, "the account is linked at Go live, never typed in"
+    assert "999" in a.page.inner_text("#set"), "the linked account is shown"
+    # the other tab changes the page's Facebook page ID and renames it
+    b.call("PATCH", f"/api/admin/pages/{SLUG}", {"fb_page_id": "777", "name": "Dummy Sports HQ"})
     a.page.fill("#set [name=timezone]", "Europe/London")
     a.page.click("#set button.primary")
     a.page.wait_for_function("() => document.querySelector('#toast').textContent === 'Saved'")
-    assert a.page.input_value("#set [name=socialpilot_login_id]") == "777", "the form shows what is stored now"
+    assert a.page.input_value("#set [name=fb_page_id]") == "777", "the form shows what is stored now"
     assert a.page.input_value("#set [name=name]") == "Dummy Sports HQ"
     a.page.fill("#set [name=logo_text]", "DS")
     a.page.evaluate("() => { document.querySelector('#toast').textContent = ''; }")
     a.page.click("#set button.primary")
     a.page.wait_for_function("() => document.querySelector('#toast').textContent === 'Saved'")
     p = page_now(a)
-    assert (p["name"], p["socialpilot_login_id"], p["timezone"], p["theme"].get("logo_text")) == ("Dummy Sports HQ", "777", "Europe/London", "DS")
+    assert (p["name"], p["fb_page_id"], p["timezone"], p["theme"].get("logo_text")) == ("Dummy Sports HQ", "777", "Europe/London", "DS")
     changes = [sorted(e["fields"]) for e in a.call("GET", "/api/admin/audit?days=1")["entries"] if e["action"] == "page_changed"]
     assert ["timezone"] in changes and ["theme"] in changes, "each save sent the one field changed"
-    assert not any("socialpilot_login_id" in f and "theme" in f for f in changes), "A never sent the account back"
+    assert not any("fb_page_id" in f and "theme" in f for f in changes), "A never sent the page ID back"
+    assert page_now(a)["socialpilot_login_id"] == "999", "the account the onboarding routine linked is never sent"
     # a name longer than kept: the form shows the name as stored, and the next save does not send it again
     a.page.fill("#set [name=name]", "N" * 150)
     a.page.click("#set button.primary")
     a.page.wait_for_function("() => document.querySelector('#set [name=name]').value.length === 100")
     b.call("PATCH", f"/api/admin/pages/{SLUG}", {"name": "Dummy Sports"})
-    a.page.fill("#set [name=fb_page_id]", "124")
+    a.page.fill("#set [name=language]", "Spanish")
     a.page.click("#set button.primary")
     a.page.wait_for_function("() => document.querySelector('#set [name=name]').value === 'Dummy Sports'")
-    assert (page_now(a)["name"], page_now(a)["fb_page_id"]) == ("Dummy Sports", "124")
-    a.call("PATCH", f"/api/admin/pages/{SLUG}", {"socialpilot_login_id": "999", "timezone": "America/New_York", "fb_page_id": "123"})
+    assert (page_now(a)["name"], page_now(a)["language"]) == ("Dummy Sports", "Spanish")
+    a.call("PATCH", f"/api/admin/pages/{SLUG}", {"language": "English", "timezone": "America/New_York", "fb_page_id": "123"})
     a.ctx.close(); b.ctx.close()
 
 
 def test_two_admins_giving_an_editor_pages_keep_both_grants(server, browser):
     a, b = Tab(browser, server), Tab(browser, server)
-    second = a.call("POST", "/api/admin/pages", {"name": "Grant Second"})["page"]["slug"]
-    third = a.call("POST", "/api/admin/pages", {"name": "Grant Third"})["page"]["slug"]
+    second = a.call("POST", "/api/admin/pages", {"name": "Grant Second", "workspace": WS})["page"]["slug"]
+    third = a.call("POST", "/api/admin/pages", {"name": "Grant Third", "workspace": WS})["page"]["slug"]
     uid = invite(a, "grants@example.com", pages=[SLUG])
     a.go("#/admin/users", f'tr[data-u="{uid}"]')
     b.call("PATCH", f"/api/admin/users/{uid}", {"pages": [SLUG, second]})
@@ -204,27 +209,27 @@ def test_signed_out_while_typing_an_admin_gets_their_changes_back(server, browse
     a.go(f"#/admin/page/{SLUG}", "#ls-notes")
     a.ctx.clear_cookies()                                              # (the session ran out)
     a.page.fill("#ls-notes", "Practice reports are too minor.")
-    a.page.fill("#set [name=socialpilot_login_id]", "4242")
+    a.page.fill("#set [name=fb_page_id]", "4242")
     a.page.click("#ls-save")
     a.page.wait_for_selector("input[name=email]")
     a.sign_in("admin@example.com")
     a.page.wait_for_selector("#ls-notes")
     a.page.wait_for_function("() => document.querySelector('#ls-notes').value === 'Practice reports are too minor.'")
-    assert a.page.input_value("#set [name=socialpilot_login_id]") == "4242"
+    assert a.page.input_value("#set [name=fb_page_id]") == "4242"
     assert "your changes are back" in a.toast()
     a.page.click("#ls-save")
     a.page.wait_for_function("() => document.querySelector('#toast').textContent.startsWith('Saved: used from')")
     assert a.call("GET", f"/api/admin/pages/{SLUG}/lessons")["lessons"]["admin_notes"] == "Practice reports are too minor."
     a.page.click("#set button.primary")
     a.page.wait_for_function("() => document.querySelector('#toast').textContent === 'Saved'")
-    assert page_now(a)["socialpilot_login_id"] == "4242"
-    a.call("PATCH", f"/api/admin/pages/{SLUG}", {"socialpilot_login_id": "999"})
+    assert page_now(a)["fb_page_id"] == "4242"
+    a.call("PATCH", f"/api/admin/pages/{SLUG}", {"fb_page_id": "123"})
     a.ctx.close()
 
 
 def test_access_given_later_shows_without_a_reload(server, browser):
     a = Tab(browser, server)
-    uid = invite(a, "later@example.com", pages=[])
+    uid = invite(a, "later@example.com", pages=[], workspace=WS)
     e = Tab(browser, server, email="later@example.com")
     e.page.wait_for_selector("text=No pages are assigned to you yet")
     a.call("PATCH", f"/api/admin/users/{uid}", {"pages": [SLUG]})
@@ -235,7 +240,7 @@ def test_access_given_later_shows_without_a_reload(server, browser):
     a.call("PATCH", f"/api/admin/users/{uid}", {"role": "admin"})
     e.page.evaluate("() => { S.meAt = Date.now() - 61e3; }")
     e.go("#/templates", "#main .panel")
-    e.page.wait_for_selector('#top a[href="#/admin/users"]')
+    e.page.wait_for_selector('#top a[href="#/admin/testers"]')
     a.ctx.close(); e.ctx.close()
 
 
@@ -295,31 +300,31 @@ def test_a_double_click_on_add_source_adds_it_once(server, browser):
 def test_a_setting_typed_in_and_put_back_is_not_sent(server, browser):
     a, b = Tab(browser, server), Tab(browser, server)
     a.go(f"#/admin/page/{SLUG}", "#set")
-    was = a.page.input_value("#set [name=socialpilot_login_id]")
-    a.page.fill("#set [name=socialpilot_login_id]", was + "0")
-    a.page.fill("#set [name=socialpilot_login_id]", was)               # (put back as it was drawn)
-    b.call("PATCH", f"/api/admin/pages/{SLUG}", {"socialpilot_login_id": "777"})
+    was = a.page.input_value("#set [name=fb_page_id]")
+    a.page.fill("#set [name=fb_page_id]", was + "0")
+    a.page.fill("#set [name=fb_page_id]", was)                         # (put back as it was drawn)
+    b.call("PATCH", f"/api/admin/pages/{SLUG}", {"fb_page_id": "777"})
     a.page.fill("#set [name=timezone]", "Europe/London")
     with a.page.expect_request(lambda r: r.method == "PATCH" and f"/api/admin/pages/{SLUG}" in r.url) as req:
         a.page.click("#set button.primary")
     assert json.loads(req.value.post_data) == {"timezone": "Europe/London"}
     a.page.wait_for_function("() => document.querySelector('#toast').textContent === 'Saved'")
-    assert page_now(a)["socialpilot_login_id"] == "777", "the other admin's account is kept"
-    assert a.page.input_value("#set [name=socialpilot_login_id]") == "777"
-    a.call("PATCH", f"/api/admin/pages/{SLUG}", {"socialpilot_login_id": "999", "timezone": "America/New_York"})
+    assert page_now(a)["fb_page_id"] == "777", "the other admin's change is kept"
+    assert a.page.input_value("#set [name=fb_page_id]") == "777"
+    a.call("PATCH", f"/api/admin/pages/{SLUG}", {"fb_page_id": "123", "timezone": "America/New_York"})
     a.ctx.close(); b.ctx.close()
 
 
 def test_a_page_box_or_role_changed_and_put_back_is_not_sent(server, browser):
     a, b = Tab(browser, server), Tab(browser, server)
-    second = a.call("POST", "/api/admin/pages", {"name": "Back Second"})["page"]["slug"]
-    third = a.call("POST", "/api/admin/pages", {"name": "Back Third"})["page"]["slug"]
+    second = a.call("POST", "/api/admin/pages", {"name": "Back Second", "workspace": WS})["page"]["slug"]
+    third = a.call("POST", "/api/admin/pages", {"name": "Back Third", "workspace": WS})["page"]["slug"]
     uid = invite(a, "putback@example.com", pages=[SLUG])
     row = f'tr[data-u="{uid}"]'
     a.go("#/admin/users", row)
     a.page.check(f'{row} [data-pages] input[value="{third}"]')
     a.page.uncheck(f'{row} [data-pages] input[value="{third}"]')
-    a.page.select_option(f"{row} [data-role]", "admin")
+    a.page.select_option(f"{row} [data-role]", "super")
     a.page.select_option(f"{row} [data-role]", "editor")
     b.call("PATCH", f"/api/admin/users/{uid}", {"pages_add": [third]})
     a.page.check(f'{row} [data-pages] input[value="{second}"]')
@@ -334,8 +339,8 @@ def test_a_page_box_or_role_changed_and_put_back_is_not_sent(server, browser):
 
 def test_a_page_ticked_while_a_row_is_saved_stays_ticked_to_be_saved(server, browser):
     a = Tab(browser, server)
-    second = a.call("POST", "/api/admin/pages", {"name": "Held Second"})["page"]["slug"]
-    third = a.call("POST", "/api/admin/pages", {"name": "Held Third"})["page"]["slug"]
+    second = a.call("POST", "/api/admin/pages", {"name": "Held Second", "workspace": WS})["page"]["slug"]
+    third = a.call("POST", "/api/admin/pages", {"name": "Held Third", "workspace": WS})["page"]["slug"]
     uid = invite(a, "heldrow@example.com", pages=[SLUG])
     row = f'tr[data-u="{uid}"]'
     a.go("#/admin/users", row)
@@ -363,12 +368,12 @@ def test_a_page_ticked_while_a_row_is_saved_stays_ticked_to_be_saved(server, bro
 
 def test_access_taken_away_is_said_when_the_details_are_asked_again(server, browser):
     a = Tab(browser, server)
-    other = a.call("POST", "/api/admin/pages", {"name": "Taken Other"})["page"]["slug"]
+    other = a.call("POST", "/api/admin/pages", {"name": "Taken Other", "workspace": WS})["page"]["slug"]
     a.call("PATCH", f"/api/admin/pages/{SLUG}", {"name": "Dummy Sports"})
     did = invite(a, "demoted@example.com", role="admin", pages=[SLUG])
     d = Tab(browser, server, email="demoted@example.com")
     d.go("#/admin/users", "#inv")
-    a.call("PATCH", f"/api/admin/users/{did}", {"role": "editor"})
+    a.call("PATCH", f"/api/admin/users/{did}", {"role": "editor", "workspace": WS})
     d.page.evaluate("() => { S.meAt = Date.now() - 61e3; }")          # (a minute later)
     d.page.evaluate("() => { location.hash = '#/admin/pages'; }")
     d.page.wait_for_function("() => document.querySelector('#toast').textContent.includes('no longer an admin')")
@@ -389,14 +394,14 @@ def test_changes_kept_at_sign_out_are_not_given_to_another_admin(server, browser
     invite(a, "admin2@example.com", role="admin")
     a.go(f"#/admin/page/{SLUG}", "#set")
     a.ctx.clear_cookies()                                              # (the session ran out)
-    a.page.fill("#set [name=socialpilot_login_id]", "5555")
+    a.page.fill("#set [name=fb_page_id]", "5555")
     a.page.click("#set button.primary")
     a.page.wait_for_selector("input[name=email]")
     a.sign_in("admin2@example.com")
     a.page.wait_for_selector("#set")
     a.page.wait_for_timeout(300)
-    stored = page_now(a)["socialpilot_login_id"]
-    assert stored != "5555" and a.page.input_value("#set [name=socialpilot_login_id]") == stored
+    stored = page_now(a)["fb_page_id"]
+    assert stored != "5555" and a.page.input_value("#set [name=fb_page_id]") == stored
     assert "your changes are back" not in (a.toast() or "")
     assert a.page.evaluate("() => sessionStorage.getItem('drafts')") is None
     a.ctx.close()
@@ -417,5 +422,5 @@ def test_an_editor_made_admin_gets_the_admin_screens_at_once(server, browser):
     e.page.wait_for_selector("text=Pick up to 5 stories")
     a.call("PATCH", f"/api/admin/users/{uid}", {"role": "admin"})
     e.go("#/admin/users", "#inv")                                      # (within the minute)
-    e.page.wait_for_selector('#top a[href="#/admin/users"]')
+    e.page.wait_for_selector('#top a[href="#/admin/testers"]')
     a.ctx.close(); e.ctx.close()

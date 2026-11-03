@@ -72,7 +72,8 @@ def server():
 def browser():
     with sync_api.sync_playwright() as p:
         try:
-            b = p.chromium.launch()
+            from bore.cards import _chrome_path
+            b = p.chromium.launch(**({"executable_path": _chrome_path()} if _chrome_path() else {}))
         except Exception as e:
             pytest.skip(f"no headless Chromium here: {e}")
         yield b

@@ -47,10 +47,10 @@ owner may lower a page's budgets, never raise them above the limits.
 
 | Route | Who | Does |
 |---|---|---|
-| `GET auth/me` | anyone signed in | `{user, pages: [{slug, name, status, workspace, can_manage}], workspace, open_access}` |
+| `GET auth/me` | anyone signed in | `{user, pages: [{slug, name, status, workspace, can_manage, posts_per_day}], workspace, open_access}` (`posts_per_day`: the page's budget, what the approvals page counts a day against) |
 | `GET pages` | all | the pages the person may see (editors: name and status only), `doc_types`, `steps` |
 | `POST pages` | owner, super | `{name, fb_page_url?, niche?, language?, timezone?}` a new page in `draft` (the super: `{workspace}`, else their own) |
-| `GET pages/<slug>` | owner, super (editors: name and status) | the page, `missing` (what Go live still needs) |
+| `GET pages/<slug>` | owner, super (editors: name and status) | the page, `missing` (what Go live still needs), `connect_help` (the product owner's SocialPilot instructions, Admin > Settings) |
 | `PATCH pages/<slug>` | owner, super | settings, budgets, `playbook`, `socialpilot_connected: true` (the tick); never `socialpilot_login_id` |
 | `* pages/<slug>/docs/<templates\|visual\|tone>[/start\|part\|finish]` | owner, super | the reference documents, uploaded in parts as in Admin > Pages |
 | `* pages/<slug>/sources`, `lessons`, `sheet` | owner, super | as in Admin > Pages |
@@ -66,6 +66,7 @@ owner may lower a page's budgets, never raise them above the limits.
 | `POST admin/testers` | super | `{email, name, workspace_name, posts_per_day?, premium_per_day?}`: the workspace and its owner's invite `{workspace, user, setup_link}` |
 | `GET admin/workspaces`, `PATCH admin/workspaces/<id>` | super | `{name?, limits: {posts_per_day?, premium_per_day?}}` |
 | `POST admin/users` | super | an invite `{email, role, workspace?, pages?}` (no workspace: the one of the pages given) |
+| `GET admin/settings`, `PATCH admin/settings` | super | the product's own settings, `settings/product`: `{socialpilot_connect}` (up to 3,000 characters), the text owners read on a page's "Connect in SocialPilot" step |
 
 A paused page's Studio is read only; a page that is not live has no Studio changes, no posts made, none
 approved and none scheduled.
@@ -95,3 +96,24 @@ approved and none scheduled.
 - `GET queue`: also `waiting: [{id, page, why}]`, approved posts of pages that cannot publish now.
   `POST result {status: publishing}` is refused for them. `socialpilot_login_id` is only ever a live
   page's own, never one on the deny list.
+
+## The screens (`dashboard/public/`)
+
+One page app (`index.html`, `app.js`, `app.css`) and the approvals page (`review.html`), in the
+product's look (docs/PRODUCT.md "The look"). Hash routes:
+
+| Route | Who | Shows |
+|---|---|---|
+| `#/pages` | owner (and the super with a workspace of their own) | the workspace's pages with their status (draft, going live, live, paused, failed), Pause / Resume; with no page yet: "Connect your first page" (where an owner without pages starts) |
+| `#/pages/new`, `#/pages/<slug>/details` | owner | 1 Page details: name, Facebook address, niche, caption language, time zone (and, once made, the budgets up to the limits) |
+| `#/pages/<slug>/connect` | owner | 2 Connect in SocialPilot: `connect_help`, then the tick "I have connected this page in SocialPilot" |
+| `#/pages/<slug>/documents` | owner | 3 Upload documents: templates, visual references, caption language and tone, sent in parts with progress |
+| `#/pages/<slug>/review` | owner | 4 the checklist and the red **Go live on Facebook** button, off with what is missing until `missing` is empty |
+| `#/pages/<slug>/status` | anyone who may see the page | each onboarding step as the routine reports it (`GET pages/<slug>/onboarding` every 3 s while going live), then Live with Approvals and Studio, or the reason and Try again |
+| `#/pages/<slug>/sources` | owner | the sources and the playbook the onboarding routine proposed, to change |
+| `#/workspace` | owner | Editors: invite (a one-time link), the pages each may use, reset link, deactivate; the workspace's recent activity |
+| `#/studio`, `#/templates`, `/review.html` | everyone with the page | Post Studio (read only, and said so, for a page that is not live or is paused), the templates, the hourly approvals |
+| `#/admin/testers`, `pages`, `users`, `templates`, `health`, `audit`, `usage`, `settings` | super | testers and their workspaces (invite, budgets, pause their pages), every page with its status, users, health, logs, the SocialPilot text |
+
+With open access on, `GET auth/me` answers without a session and the screens never show the sign-in,
+forgot-password or change-password screens (they go to the start screen) nor Sign out.

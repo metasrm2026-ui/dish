@@ -4,23 +4,32 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Hourly approvals</title>
+<title>Approvals · Bore Studio</title>
+<meta name="theme-color" content="#ffffff">
 <style>
-:root { --bg:#f5f5f2; --panel:#fff; --ink:#15151a; --muted:#6a6a75; --line:#e2e2dc; --soft:#efefea;
-  --ok:#0f7a38; --ok-bg:#e1f3e7; --no:#b3261e; --no-bg:#fbe6e4; --warn:#8a5a00; --warn-bg:#fdf0d5; --focus:#2451d6; }
-@media (prefers-color-scheme: dark) { :root { --bg:#0f0f12; --panel:#18181d; --ink:#ececf1; --muted:#9696a3; --line:#2a2a32; --soft:#22222a;
-  --ok:#5fd18a; --ok-bg:#12301f; --no:#ff8a80; --no-bg:#3a1714; --warn:#f2c46b; --warn-bg:#352a12; --focus:#8fb0ff; } }
+/* Bore Studio's look (docs/PRODUCT.md "The look", as dashboard/public/app.css): white, dark green text, a calm green accent */
+:root { --bg:#ffffff; --panel:#ffffff; --ink:#0f3d2e; --muted:#5a7366; --line:#d9e6de; --soft:#f1f7f3;
+  --ok:#17784a; --ok-bg:#e2f3e9; --no:#b42318; --no-bg:#fdecea; --warn:#8a5a00; --warn-bg:#fdf3d8; --focus:#1f7a52; --accent-soft:#e4f2ea;
+  --shadow:0 1px 2px rgba(15,61,46,.06), 0 4px 14px rgba(15,61,46,.05); color-scheme:light; }
 * { box-sizing:border-box; }
-body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust:100%; }
 button { font:inherit; color:inherit; }
-header { position:sticky; top:0; z-index:5; background:var(--bg); border-bottom:1px solid var(--line); }
+a { color:var(--focus); }
+:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+header { position:sticky; top:0; z-index:5; background:var(--panel); border-bottom:1px solid var(--line); }
+.brand { display:inline-flex; align-items:center; gap:9px; font-weight:800; font-size:17px; color:var(--ink); text-decoration:none; white-space:nowrap; }
+.brand .mark { width:26px; height:26px; border-radius:8px; background:var(--focus); position:relative; flex:none; }
+.brand .mark::after { content:''; position:absolute; inset:7px; border-radius:50%; border:3px solid #fff; }
+.brandbar { border-bottom:1px solid var(--line); }
+.brandbar .bar { padding:10px 16px; }
+.brandbar .back { font-size:13px; font-weight:600; color:var(--muted); text-decoration:none; margin-left:auto; }
 @media (max-width: 700px), (max-height: 700px) { header { position:static; } }
 .bar { max-width:1180px; margin:0 auto; padding:12px 16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
 h1 { font-size:17px; margin:0 8px 0 0; }
 .tabs { display:flex; gap:4px; background:var(--soft); padding:3px; border-radius:10px; max-width:100%; overflow-x:auto; scrollbar-width:none; }
 .tabs button { white-space:nowrap; }
 .tabs button { border:0; background:transparent; padding:6px 12px; border-radius:8px; cursor:pointer; color:var(--muted); font-weight:600; }
-.tabs button.on { background:var(--panel); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+.tabs button.on { background:var(--panel); color:var(--focus); box-shadow:0 1px 2px rgba(15,61,46,.12); }
 .clearbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; max-width:1200px; margin:10px auto 0; padding:10px 14px; background:var(--panel); border-radius:12px; font-size:14px; }
 .clearbar button { border:1px solid var(--line, #ddd); background:var(--panel); border-radius:8px; padding:6px 12px; cursor:pointer; font-weight:600; }
 .clearbar button:disabled { opacity:.5; cursor:default; }
@@ -57,7 +66,7 @@ select { border:1px solid var(--line); background:var(--panel); color:var(--ink)
 .keys { margin-left:auto; color:var(--muted); font-size:12px; }
 kbd { border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; font:11px ui-monospace, monospace; background:var(--panel); }
 main { max-width:1180px; margin:0 auto; padding:4px 16px 60px; display:flex; flex-direction:column; gap:16px; }
-.post { position:relative; background:var(--panel); border:1px solid var(--line); border-radius:14px; display:grid; grid-template-columns: minmax(0, 420px) 1fr; overflow:hidden; }
+.post { position:relative; background:var(--panel); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); display:grid; grid-template-columns: minmax(0, 420px) 1fr; overflow:hidden; }
 .post.focus { outline:2px solid var(--focus); outline-offset:2px; }
 .post .img { background:transparent; position:relative; align-self:start; }
 .post .img img { border-radius:0 0 0 0; }
@@ -123,7 +132,7 @@ details a { color:var(--focus); word-break:break-all; display:block; margin-top:
 .empty { text-align:center; color:var(--muted); padding:80px 0; }
 .login { max-width:360px; margin:14vh auto; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:24px; display:grid; gap:10px; }
 .login input { padding:11px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--ink); font:inherit; }
-.login button { padding:11px; border:0; border-radius:10px; background:var(--ink); color:var(--bg); font-weight:700; cursor:pointer; }
+.login button { padding:11px; border:0; border-radius:10px; background:var(--focus); color:#fff; font-weight:700; cursor:pointer; }
 .toast { position:fixed; left:16px; right:16px; margin:0 auto; width:max-content; max-width:calc(100vw - 32px); bottom:20px; background:var(--ink); color:var(--bg);
   padding:10px 16px; border-radius:10px; font-weight:600; opacity:0; transition:opacity .2s; pointer-events:none; z-index:20; }
 .toast.show { opacity:1; pointer-events:auto; cursor:pointer; }
@@ -137,12 +146,12 @@ dialog::backdrop { background:rgba(0,0,0,.85); }
 <div class="toast" id="toast"></div>
 <dialog id="zoom" onclick="this.close()"><img id="zoomimg" alt=""></dialog>
 <script>
-const CAP = 20;
+const CAP = 10;             // a page's posts a day when /api/auth/me does not say (docs/PRODUCT.md "Budgets")
 const REASONS = ['Weak story', 'Old news by now', 'Off-niche', 'Image quality', 'Wrong / unverified facts', 'Caption off-voice', 'Duplicate'];
 const $ = s => document.querySelector(s);
 let key = 'open', wasIn = false;   // wasIn: an answer came signed in (a later refusal: signed out after a break)
 let tab = 'pending', page = 'all', drafts = [], stats = {}, totals = {}, publisher = {}, lessonsSummary = [], focusIdx = 0, links = [], linkOpen = false, health = {}, healthAt = 0;
-let myPages = null;          // the user's pages and their names as set in Admin > Pages (/api/auth/me): one tile each
+let myPages = null;          // the user's pages, their names and posts-a-day budgets (/api/auth/me): one tile each
 let order = 'new'; try { if (localStorage.getItem('dashOrder') === 'old') order = 'old'; } catch (e) {}
 // what the editor typed and has not sent yet, by post ({caption, note, reasons, fb, fbOpen, st: the
 // post's status then}): every redraw draws it again, and it outlives a reload or a sign-in in this tab.
@@ -181,10 +190,10 @@ async function api(path, opts = {}) {
 function loginView() { location.href = '/#/login?next=review'; }
 function todayTiles() {
   const shown = myPages || Object.keys(stats).map(s => ({ slug: s, name: s }));
-  return shown.map(({ slug: s, name }) => {
+  return shown.map(({ slug: s, name, posts_per_day }) => {
     const c = stats[s] || {}; const posted = (c.posted || 0) + (c.scheduled || 0), approved = (c.approved || 0) + (c.publishing || 0), pending = c.pending || 0, rej = c.rejected || 0, failed = c.failed || 0;
-    const w = n => Math.min(100, n / CAP * 100);
-    return `<div class="tile"><b>${esc(name || s)}: ${posted + approved}/${CAP} today</b>
+    const cap = posts_per_day || CAP, w = n => Math.min(100, n / cap * 100);
+    return `<div class="tile"><b>${esc(name || s)}: ${posted + approved}/${cap} today</b>
       <div class="meter"><i style="width:${w(posted + approved)}%;background:var(--ok)"></i><i style="width:${w(pending)}%;background:var(--warn)"></i></div>
       <small>${posted} scheduled/posted · ${pending} waiting · ${rej} rejected${failed ? ` · <b style="color:var(--no)">${failed} failed</b>` : ''}</small></div>`;
   }).join('');
@@ -531,7 +540,8 @@ function render() {
   if (drawn !== drawnIds) { if (drawnIds && drawn) drawnAt = performance.now(); drawnIds = drawn; }
   const f = document.activeElement, fp = f && f.matches('.post textarea, .post input[type=text]') ? f.closest('.post').dataset.id : null,
         fsel = fp && (f.classList.contains('fbtext') ? '.fbtext' : f.classList.contains('why-note') ? '.why-note' : '.side > textarea');
-  $('#app').innerHTML = `<header>${newer}<div class="bar"><h1><a href="/#/studio" style="color:inherit;text-decoration:none" title="Back to Studio">←</a> Hourly posts: approvals</h1>
+  $('#app').innerHTML = `<header>${newer}<div class="brandbar"><div class="bar"><a class="brand" href="/#/"><span class="mark" aria-hidden="true"></span>Bore Studio</a>
+      <a class="back" href="/#/studio">← Back to Studio</a></div></div><div class="bar"><h1>Hourly posts: approvals</h1>
     <div class="tabs">${[['pending','Waiting'],['regenerate','Regenerating'],['approved','Queued'],['scheduled','Scheduled'],['posted','Posted'],['rejected','Not okay'],['failed','Failed'],['cleared','Cleared'],['all','All']].map(([t, l]) =>
       `<button class="${t === tab ? 'on' : ''}" onclick="tab='${t}';focusIdx=0;load()">${l}${counts[t] ? `<span class="n">${counts[t]}</span>` : ''}</button>`).join('')}</div>
     <div class="sort" role="group" aria-label="Sort by time created"><span>Created</span>${[['new','Newest first'],['old','Oldest first']].map(([o, l]) =>

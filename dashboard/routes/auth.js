@@ -5,13 +5,15 @@ import { issueReset, resetValid, sendMail } from '../lib/resets.js';
 import { audit } from '../lib/audit.js';
 import { ok, bad, clean, siteOrigin } from '../lib/http.js';
 import { mayUse, mayManage } from '../lib/tenancy.js';
-import { statusOf } from '../lib/pages.js';
+import { statusOf, budgetsOf } from '../lib/pages.js';
 
 // the pages this person may use (lib/tenancy.js): their workspace's, an editor's own; the super's: all
+// posts_per_day: the page's budget (lib/pages.js budgetsOf), what the approvals page counts a day against
 async function myPages(u) {
-  const pages = (await listRecords('pages')).filter(p => !p.archived && mayUse(u, p));
-  return pages.map(p => ({ slug: p.slug, name: p.name, theme: p.theme || {}, status: statusOf(p), workspace: p.workspace || null,
-                           can_manage: mayManage(u, p) }));
+  const [pages, ws] = await Promise.all([listRecords('pages'), listRecords('workspaces')]);
+  const wsOf = Object.fromEntries(ws.map(w => [w.id, w]));
+  return pages.filter(p => !p.archived && mayUse(u, p)).map(p => ({ slug: p.slug, name: p.name, theme: p.theme || {}, status: statusOf(p),
+    workspace: p.workspace || null, can_manage: mayManage(u, p), posts_per_day: budgetsOf(p, wsOf[p.workspace]).posts_per_day }));
 }
 
 export default async function handler(req, res) {
