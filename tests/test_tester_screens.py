@@ -380,7 +380,7 @@ def test_the_approvals_page_counts_against_the_page_s_own_budget(server, browser
     t.page.goto(server + "/review.html")
     t.page.wait_for_selector(".tile")
     assert re.search(r"Dummy Sports: \d+/4 today", t.text(".today")), t.text(".today")
-    assert "Bore Studio" in t.text("header .brand")
+    assert "Dish" in t.text("header .brand")
     t.call("PATCH", "/api/pages/dummy-sports", {"posts_per_day": 10})
     t.ctx.close()
 
@@ -417,7 +417,7 @@ def test_every_screen_has_the_look_and_fits_the_screen(server, browser, width):
     t = Tab(browser, server, email=None, width=width)
     t.page.wait_for_selector("input[name=email]")
     t.fits("sign in")
-    assert t.text("#top .brand") == "Bore Studio"
+    assert t.text("#top .brand") == "Dish"
     look = t.page.evaluate("""() => { const b = getComputedStyle(document.body), h = getComputedStyle(document.querySelector('.login h1'));
       return [b.backgroundColor, b.color, h.color, getComputedStyle(document.querySelector('.login .btn.primary')).backgroundColor]; }""")
     assert look[:3] == ["rgb(255, 255, 255)", "rgb(15, 61, 46)", "rgb(15, 61, 46)"], look
@@ -429,7 +429,7 @@ def test_every_screen_has_the_look_and_fits_the_screen(server, browser, width):
             t.go(h, "#main .panel, #main .card")
             t.page.wait_for_timeout(300)
             t.fits(h)
-            assert t.text("#top .brand") == "Bore Studio"
+            assert t.text("#top .brand") == "Dish"
         if email.startswith("tester"):
             t.go("#/pages/demo-page/review", "#golive")
             red = t.page.evaluate("() => getComputedStyle(document.querySelector('#golive')).backgroundColor")

@@ -1,4 +1,4 @@
-/* Bore Studio's look (docs/PRODUCT.md "The look"): a white page, dark green text, one calm green
+/* Dish's look (docs/PRODUCT.md "The look"): a white page, dark green text, one calm green
    accent, clear cards with room around them, readable on a 360 px phone. The Go live button is red. */
 :root { --bg:#ffffff; --panel:#ffffff; --ink:#0f3d2e; --muted:#5a7366; --line:#d9e6de; --soft:#f1f7f3;
   --accent:#1f7a52; --accent-ink:#ffffff; --accent-soft:#e4f2ea; --sel:#e9f5ee;
