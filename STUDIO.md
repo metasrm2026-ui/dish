@@ -10,6 +10,10 @@ when it is done, run `python -m bore.cli studio jobs` again for the next, until 
 
 Nothing is published from here. Posting happens only when an editor presses Send.
 
+Each page's own rules (its voice, caption rules, card templates, what it posts) are in its playbook
+and reference documents, which every brief carries. A paused page's Studio is read-only: the
+dashboard starts no job for it.
+
 ## 0. Setup
 
 ```bash
@@ -172,8 +176,9 @@ the base image (`photos[0]`). If `studio.base_image_error` is set, fail the post
 
 ## TEMPLATES (a page's templates document into templates the renderer draws)
 
-Queued when an admin uploads a new templates document (or makes another version active), when an
-admin presses "Convert templates again", and when an editor rejects a template with a note. Such a
+Queued when a page goes live (ONBOARD.md step 5), when its owner uploads a new templates document
+(or makes another version active) or presses "Convert templates again", and when an editor rejects
+a template with a note. Such a
 job has no posts: `work/studio/<job>/brief.json` says what to convert. Editors see each template
 you send under Templates, the document page beside your preview, and approve it or reject it with
 a note, or take it out of use; only approved templates are offered in IDEAS (beside the layouts)

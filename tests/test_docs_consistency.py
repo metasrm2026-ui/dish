@@ -18,27 +18,25 @@ def test_audience_hours_are_described_only_when_they_are_set():
             assert stale not in ROUTINE, stale
 
 
-def test_the_headshot_rule_sends_the_session_only_where_the_renderer_can_place_it():
-    """A tight headshot (ESPN-style 600x436, the face 34% x 60% of it) is BLOCKED in Huddle's report
-    and quote alike: quote's clear area is no bigger and the photo is scaled by its height in both.
-    So the docs may name a template as the way round a BLOCKED headshot only if the renderer
-    actually keeps the face clear in it (the Oct 21 wording sent the session to quote)."""
-    import io
+def test_the_headshot_rule_names_no_layout_as_the_way_round_a_blocked_photo():
+    """A tight headshot (the face fills the frame) is BLOCKED in every layout alike: the renderer
+    already tries the headline at the top and the bottom. The docs once sent a BLOCKED headshot to
+    another template, where it was blocked too; and which layouts a page has is its playbook's, not
+    this file's. So the rule names no layout, and says to skip with --photo."""
     import re
+    rule = ROUTINE[ROUTINE.index("An official headshot"):ROUTINE.index("For news about someone's career now")]
+    assert not re.findall(r"(?:use it|switch) (?:in|to) `(\w+)`", rule), "no layout named as the way round a BLOCKED photo"
+    assert "BLOCKED" in rule and "skip with `--photo`" in rule
 
-    from PIL import Image
 
-    from bore.cards import CardSpec, plan_layout
-    buf = io.BytesIO()
-    Image.new("RGB", (600, 436), "grey").save(buf, "JPEG")
-    clear = {tpl for tpl in ("report", "quote") for focus in (None, (0.5, 0.42))
-             if not plan_layout("huddle", CardSpec(template=tpl, headline_lines=["X"], photos=[buf.getvalue()],
-                                                   face_box=(0.33, 0.12, 0.34, 0.6), focus=focus, face_size=0.6))}
-    rule = ROUTINE[ROUTINE.index("The official NFL headshot"):ROUTINE.index("For injury or trade news")]
-    named = set(re.findall(r"(?:use it|switch) (?:in|to) `(\w+)`", rule))
-    assert named <= clear, f"the docs send a blocked headshot to {named - clear}, where it is blocked too"
-    if not clear:
-        assert "BLOCKED" in rule and "skip with `--photo`" in rule
+def test_the_routines_docs_name_no_page_of_their_own():
+    """Each page's rules come from its playbook and documents (docs/PRODUCT.md): the routines' docs carry
+    no page name, account or example from any page."""
+    import re
+    for doc in ("ROUTINE.md", "STUDIO.md", "PUBLISH.md", "TOPICS.md", "ONBOARD.md", "README.md"):
+        text = (ROOT / doc).read_text()
+        assert not re.search(r"\b\d{7}\b", text), f"{doc}: a SocialPilot account id"
+        assert "Asia/Kolkata" not in text and " IST" not in text, f"{doc}: another deployment's time zone"
 
 
 def test_editors_requests_are_never_skipped_in_the_docs():

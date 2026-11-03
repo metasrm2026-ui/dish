@@ -7,14 +7,14 @@ post, never edit captions or images, never publish anything outside the approved
 Scheduling rules (computed for you by `bore publish plan`, do not change them):
 - hourly-routine posts: at least 1 hour after the post was approved (and after now), and at
   least 45 minutes between any two posts on the same page, including posts already scheduled;
-  and, only when `audience_hours` is set in config/socialpilot.yaml (off since Oct 13: posts go
-  out at any hour), inside those hours: a post approved outside them is held for the next morning
+  and, only when `audience_hours` is set in config/socialpilot.yaml (unset: posts go out at any
+  hour), inside those hours: a post approved outside them is held for the next morning
   (`held_for_audience_hours` in the plan). This is expected.
 - Post Studio posts (`studio: true`): the time the editor chose when they pressed Send, but
   never sooner than 1 hour from now. "Post now", or a chosen time that has passed (the post
   waited or was retried), = the earliest slot 45 minutes from the page's other posts. Still
   scheduled (shareType 3).
-- times are in SocialPilot's account timezone (Asia/Kolkata), format "YYYY-MM-DD HH:mm"
+- times are in SocialPilot's account timezone (the timezone in config/socialpilot.yaml), format "YYYY-MM-DD HH:mm"
 
 ## 0. Setup
 
@@ -24,9 +24,10 @@ bash scripts/ensure-deps.sh publish   # requests + PyYAML only, if missing or no
 
 `DASHBOARD_URL` and `ROUTINE_SECRET` must be set (environment or `.env`).
 Scheduling uses the **SocialPilot connector** tools in this session.
-Accounts: `config/socialpilot.yaml` (Culture Rush = loginId 2662938, Huddle Room = loginId
-2662936) or, for pages added in the admin panel, the account set there; `publish plan` gives
-each item its `socialpilot_account`. Use only that loginId. Never use "Keaton Caleb" (2662937).
+Accounts: `publish plan` gives each item its `socialpilot_account`: the account the onboarding
+routine linked to that live page (ONBOARD.md step 1), and no other. Use only that loginId. An
+account on the deny list in config/socialpilot.yaml is never used, whatever a page record says,
+and a page that is paused or not live has nothing in the queue.
 
 Saving a connector result: some commands below read what a SocialPilot call returned. Save the
 result to the file named there exactly as it came back (do not edit or shorten it), e.g.
@@ -64,7 +65,7 @@ tomorrow). Note every queued time on that account that is NOT one of ours in
 ## 3. Plan the slots
 
 ```bash
-python -m bore.cli publish plan [--busy "huddle=YYYY-MM-DD HH:MM" ...]
+python -m bore.cli publish plan [--busy "demo-page=YYYY-MM-DD HH:MM" ...]
 ```
 
 Pass one `--busy` per extra queued time found in step 2 (the page slug,
@@ -183,6 +184,6 @@ The dashboard shows it in red until someone marks it done.
 
 ## 6. Finish
 
-End with a short summary: each draft id, page, and result (scheduled for <time IST / ET>,
+End with a short summary: each draft id, page, and result (scheduled for <time, in SocialPilot's timezone>,
 posted, held for SocialPilot, or failed with reason), plus anything from `no_account`,
 `scheduled_but_superseded`, a preflight `NOTE` or a `STOP`.

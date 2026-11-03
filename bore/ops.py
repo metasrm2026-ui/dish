@@ -144,6 +144,8 @@ def routine_for(command: str, target: str = "", session: dict | None = None) -> 
     head, _, step = command.partition(" ")
     if head == "publish":
         return "publisher"
+    if head == "onboard":
+        return "onboarding"
     if head == "studio" and step in ("feed", "feed-publish"):
         return "topics"
     if head == "studio" and step in ("jobs", "images", "done", "fail", "precheck"):

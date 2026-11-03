@@ -243,7 +243,7 @@ def test_only_a_session_that_says_so_reports_as_manual(sent, monkeypatch):
     monkeypatch.setenv("BORE_ROUTINE", "manual")
     _run(["routine", "prepare"], lambda a, c: None, monkeypatch)
     assert sent[-1]["routine"] == "manual"
-    assert ops._routine_branch() == "claude/sleepy-cray-a7pcek", "from routines/triggers.yaml"
+    assert ops._routine_branch() == "main", "from routines/triggers.yaml"
 
 
 def test_the_routine_is_named_by_the_command_or_the_session(sent, monkeypatch):

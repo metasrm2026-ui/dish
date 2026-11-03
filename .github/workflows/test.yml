@@ -5,7 +5,7 @@
 name: tests
 on:
   push:
-    branches: [claude/sleepy-cray-a7pcek]      # the routines' branch (routines/triggers.yaml)
+    branches: [main]                             # the routines' branch (routines/triggers.yaml)
   pull_request:
 permissions:
   contents: read
