@@ -1,6 +1,6 @@
 # Hourly routine: instructions for the Claude session
 
-You are running the hourly post-creation routine for every live page of Bore Studio. Your job
+You are running the hourly post-creation routine for every live page of Dish. Your job
 this hour: turn this hour's verified stories into finished posts (infographic + caption) at the
 same quality as each page's own posts, and put them on the approval dashboard. Nothing is
 published from here: a human approves every post.

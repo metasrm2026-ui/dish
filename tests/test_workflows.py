@@ -60,7 +60,7 @@ def test_red_opens_one_issue_with_codes_and_ids_only(tmp_path):
     assert [c[1:3] for c in calls if c[0] == "fetch"] == [["POST", "/api/routine/watchdog"], ["GET", "/api/routine/health"]]
     assert all(c[3] for c in calls if c[0] == "fetch"), "the routine secret goes in the header"
     create = [c[1] for c in calls if c[0] == "create"]
-    assert len(create) == 1 and create[0]["title"] == "Bore Studio health: RED"
+    assert len(create) == 1 and create[0]["title"] == "Dish health: RED"
     assert "`hourly_stale`" in create[0]["body"] and "`demo-page-202610211405-a-story`" in create[0]["body"]
     assert "SecretSourceXYZ" not in create[0]["body"] and "No hourly" not in create[0]["body"], "never the texts"
 
@@ -69,15 +69,15 @@ def test_amber_waits_for_three_bad_checks_and_a_change_of_status_is_a_comment(tm
     amber = {"status": "amber", "reasons": [{**REASON, "level": "amber", "code": "topics_stale"}], "checked_at": 1}
     assert _kinds(_run(tmp_path, amber, {"streak": 2})) == []
     assert _kinds(_run(tmp_path, amber, {"streak": 3})) == ["create"]
-    open_amber = [{"number": 7, "title": "Bore Studio health: AMBER"}]
+    open_amber = [{"number": 7, "title": "Dish health: AMBER"}]
     calls = _run(tmp_path, {"status": "red", "reasons": [REASON], "checked_at": 1}, {"streak": 4}, open_amber)
     assert _kinds(calls) == ["update", "comment"]
-    assert calls[-2][1]["title"] == "Bore Studio health: RED" and calls[-1][1]["body"] == "Now RED."
-    assert _kinds(_run(tmp_path, amber, {"streak": 5}, [{"number": 7, "title": "Bore Studio health: AMBER"}])) == ["update"]
+    assert calls[-2][1]["title"] == "Dish health: RED" and calls[-1][1]["body"] == "Now RED."
+    assert _kinds(_run(tmp_path, amber, {"streak": 5}, [{"number": 7, "title": "Dish health: AMBER"}])) == ["update"]
 
 
 def test_green_closes_the_issue_an_unreachable_dashboard_is_red_and_no_secret_is_a_notice(tmp_path):
-    calls = _run(tmp_path, {"status": "green", "reasons": [], "checked_at": 1}, {"streak": 0}, [{"number": 7, "title": "Bore Studio health: RED"}])
+    calls = _run(tmp_path, {"status": "green", "reasons": [], "checked_at": 1}, {"streak": 0}, [{"number": 7, "title": "Dish health: RED"}])
     assert _kinds(calls) == ["comment", "update"] and calls[-1][1]["state"] == "closed"
     assert _kinds(_run(tmp_path, {"status": "green", "reasons": [], "checked_at": 1}, {"streak": 0})) == []
     calls = _run(tmp_path)                                              # neither call answers
@@ -97,10 +97,10 @@ def test_the_watchdogs_fresh_status_is_the_one_judged(tmp_path):
     issue during an outage. The GET is asked only when the watchdog gave no status."""
     red = {"status": "red", "reasons": [{**REASON, "code": "storage_unreadable"}], "checked_at": 2}
     stale = {"status": "green", "reasons": [], "checked_at": 1}
-    calls = _run(tmp_path, stale, {"streak": 1, "open_jobs": 0, "health": red}, [{"number": 7, "title": "Bore Studio health: RED"}])
+    calls = _run(tmp_path, stale, {"streak": 1, "open_jobs": 0, "health": red}, [{"number": 7, "title": "Dish health: RED"}])
     assert [c[1:3] for c in calls if c[0] == "fetch"] == [["POST", "/api/routine/watchdog"]]
     assert _kinds(calls) == ["update"] and "`storage_unreadable`" in calls[-1][1]["body"], "not closed by a stale green"
-    calls = _run(tmp_path, stale, {"streak": 0, "health": {"status": "unknown"}}, [{"number": 7, "title": "Bore Studio health: RED"}])
+    calls = _run(tmp_path, stale, {"streak": 0, "health": {"status": "unknown"}}, [{"number": 7, "title": "Dish health: RED"}])
     assert [c[2] for c in calls if c[0] == "fetch"] == ["/api/routine/watchdog", "/api/routine/health"]
     assert _kinds(calls) == ["comment", "update"] and calls[-1][1]["state"] == "closed"
 

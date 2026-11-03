@@ -1,4 +1,4 @@
-# Bore Studio's five routines (claude.ai/code scheduled tasks on the product's own repository), kept
+# Dish's five routines (claude.ai/code scheduled tasks on the product's own repository), kept
 # here so a change to a prompt, its model or its connectors is reviewed and tested like code
 # (tests/test_prompts.py). The live triggers are set by hand (README "The five routines"): paste
 # routines/<name>.prompt.md into the trigger, only once DASHBOARD_URL, ROUTINE_SECRET and
@@ -6,7 +6,7 @@
 # session that does not find them there). Put each trigger's id here once it exists.
 # The API-triggered ones are fired by the dashboard: its <fire>_URL / <fire>_TOKEN Vercel variables
 # hold the trigger's fire URL and token (scripts/setup-vercel.sh leaves them for the owner).
-repository: metasrm2026-ui/bore-studio
+repository: metasrm2026-ui/dish
 environment: null                               # the product's own cloud environment (its env_... id)
 branch: main
 secrets: [DASHBOARD_URL, ROUTINE_SECRET, APIFY_TOKEN]   # names only: the values live in the environment's secrets

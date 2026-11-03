@@ -387,6 +387,7 @@ def test_a_session_without_the_restored_database_never_spends_krea_unchecked(mon
     monkeypatch.setattr(cli, "_lint_or_exit", lambda d, cfg, R: None)
     monkeypatch.setattr(cli, "_store", lambda cfg: store)
     monkeypatch.setattr(R, "krea_request", lambda d, cfg, url, fb: {"prompt": "p"})
+    monkeypatch.setattr(cli, "premium_per_day", lambda slug: 6)         # the page has premium cards today
 
     class Down:
         def krea_reserve(self, *a, **k):

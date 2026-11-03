@@ -1,13 +1,13 @@
-# Bore Studio
+# Dish
 
-Bore Studio is a plug-and-play product built from the Bore engine. Anyone the product's owner
+Dish is a plug-and-play product built from the Bore engine. Anyone the product's owner
 invites (a **tester**) connects a Facebook page, uploads the page's three reference documents (post
 templates, visual references, caption language and tone) and presses **Go live on Facebook**. From
 then on the system makes production posts for that page every hour, offers Post Studio to its
 editors, and schedules what the editors approve. Nothing is ever posted without a person's approval.
 
 It has nothing to do with any other deployment of the engine: its own repository
-(`metasrm2026-ui/bore-studio`, branch `main`), Vercel project (`bore-studio`), storage, sign-ins,
+(`metasrm2026-ui/dish`, branch `main`), Vercel project (`dish`), storage, sign-ins,
 routines and budgets. No page, account, source, playbook or document of another deployment is in
 this repository, and none may ever be added. The specification is `docs/PRODUCT.md`.
 
@@ -68,7 +68,7 @@ model and connectors of `routines/triggers.yaml`, paste its prompt, and write it
 ## Setup, once
 
 1. **Vercel**: `VERCEL_TOKEN=... DASHBOARD_ALIAS=<the address> SUPER_EMAIL=<you> bash scripts/setup-vercel.sh`
-   (`VERCEL_SCOPE` for a team). It creates the project `bore-studio`, a Blob store, generates
+   (`VERCEL_SCOPE` for a team). It creates the project `dish`, a Blob store, generates
    `DATA_KEY`, `SESSION_SECRET` and `ROUTINE_SECRET` (never replacing one the project already has;
    the values go to `dashboard/.vercel/studio-secrets.env` only), deploys, creates the super user and
    prints its set-password link. Run again any time: it only adds what is missing.
@@ -85,7 +85,7 @@ model and connectors of `routines/triggers.yaml`, paste its prompt, and write it
 ## Deploy order
 
 Commit, then `DASHBOARD_ALIAS=<the address> bash dashboard/deploy.sh` (it refuses uncommitted changes in
-`dashboard/` and a folder linked to any project but `bore-studio`, runs the tests, deploys the commit
+`dashboard/` and a folder linked to any project but `dish`, runs the tests, deploys the commit
 and fails unless the address then serves it), then push the Python that needs the new API: every
 push to `main` is what the routines run next. Raise `API_LEVEL` in `deploy.sh` when the Python
 starts depending on a new endpoint.
@@ -216,7 +216,7 @@ branches are tested through their pull request (the private repository's free Ac
 the hourly health check). **Hourly health check** (`.github/workflows/health.yml`): restarts or fails stalled
 Studio jobs (`POST /api/routine/watchdog`, the same logic as an editor's open page), judges the
 health status the watchdog works out then (`GET /api/routine/health` only when it gave none), and keeps one
-issue "Bore Studio health: RED" open while something is broken (red at once, amber after 3 checks; green
+issue "Dish health: RED" open while something is broken (red at once, amber after 3 checks; green
 closes it). GitHub emails it to the repository owner. It lists codes and ids only. Owner, once:
 repository Settings > Secrets and variables > Actions > secret `STUDIO_ROUTINE_SECRET` (the dashboard's
 `ROUTINE_SECRET`) and variable `STUDIO_DASHBOARD_URL` (its address); GitHub > Settings > Notifications: email for issues.

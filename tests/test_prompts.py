@@ -71,7 +71,7 @@ def _text(p: Path) -> str:
 def test_the_five_routines_are_in_the_repo_with_their_settings():
     cfg = yaml.safe_load((ROOT / "routines" / "triggers.yaml").read_text())
     assert set(cfg["triggers"]) == set(SCHEDULE) == {p.name.split(".")[0] for p in PROMPTS}
-    assert cfg["repository"] == "metasrm2026-ui/bore-studio" and cfg["branch"] == "main"
+    assert cfg["repository"] == "metasrm2026-ui/dish" and cfg["branch"] == "main"
     assert set(cfg["secrets"]) == {"DASHBOARD_URL", "ROUTINE_SECRET", "APIFY_TOKEN"}
     for name, t in cfg["triggers"].items():
         assert t["id"] is None or re.fullmatch(r"trig_\w{20,}", t["id"]), name
@@ -82,7 +82,7 @@ def test_the_five_routines_are_in_the_repo_with_their_settings():
         assert (ROOT / t["prompt"]).exists() and (ROOT / t["doc"]).exists(), name
         prompt = _text(ROOT / t["prompt"])
         assert t["doc"] in prompt, f"{name}: the prompt sends the session to its doc"
-        assert "metasrm2026-ui/bore-studio (branch main)" in prompt and "repo bore-studio" in prompt, name
+        assert "metasrm2026-ui/dish (branch main)" in prompt and "repo dish" in prompt, name
         for var in ("DASHBOARD_URL", "ROUTINE_SECRET") + (("APIFY_TOKEN",) if name in ("hourly", "onboarding") else ()):
             assert var in prompt, f"{name}: reads {var} from the environment"
         assert "come from the environment's secrets" in prompt and "Never write a .env file" in prompt, name

@@ -1,7 +1,7 @@
 # The pipeline's health, checked every hour from outside the routines (a routine that dies cannot
 # say so): restarts or fails stalled Studio jobs (POST /api/routine/watchdog, which answers with the
 # health status worked out then; GET /api/routine/health only when it gave none), and keeps one
-# issue "Bore Studio health: RED" open while something is broken. GitHub emails new issues and comments to
+# issue "Dish health: RED" open while something is broken. GitHub emails new issues and comments to
 # the repository owner. Red opens it at once, amber after 3 checks in a row; green closes it. The
 # issue carries reason codes and ids only: the texts stay on the dashboard (review page banner,
 # admin Health tab).
@@ -59,8 +59,8 @@ jobs:
                       + ` (watchdog: ${wd.error || `${wd.open_jobs} open job(s), ${streak} bad check(s) in a row`})`);
             const { owner, repo } = context.repo;
             const issues = await github.paginate(github.rest.issues.listForRepo, { owner, repo, state: 'open', per_page: 100 });
-            const issue = issues.find(i => !i.pull_request && i.title.startsWith('Bore Studio health:'));
-            const title = `Bore Studio health: ${status.toUpperCase()}`;
+            const issue = issues.find(i => !i.pull_request && i.title.startsWith('Dish health:'));
+            const title = `Dish health: ${status.toUpperCase()}`;
             const body = [`Status **${status.toUpperCase()}**, checked ${new Date().toISOString()}.`, '',
               ...reasons.map(r => `- ${r.level} \`${r.code}\`${r.since ? ` since ${new Date(r.since).toISOString()}` : ''}`
                                   + `${(r.ids || []).length ? `: ${r.ids.map(x => `\`${x}\``).join(', ')}` : ''}`),
