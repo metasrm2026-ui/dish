@@ -46,7 +46,13 @@ def _pages(args, cfg, running: bool = False) -> list[Page]:
     the hourly flow and its collection: live ones, and a page going live when it is named."""
     pages = load_pages()
     if not pages:
-        sys.exit("no pages: run `python -m bore.cli studio sync` first (pages come from the dashboard)")
+        from .config import pages_path
+        if not pages_path().exists():
+            sys.exit("no pages: run `python -m bore.cli studio sync` first (pages come from the dashboard)")
+        if getattr(args, "page", None):
+            sys.exit(f"unknown page {args.page}")
+        print("no pages yet: the dashboard has none (nothing to do until a page goes live)", file=sys.stderr)
+        return []
     if getattr(args, "page", None):
         pages = [p for p in pages if p.slug == args.page]
         if not pages:
