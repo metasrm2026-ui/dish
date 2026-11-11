@@ -6,7 +6,7 @@
 # session that does not find them there). Put each trigger's id here once it exists.
 # The API-triggered ones are fired by the dashboard: its <fire>_URL / <fire>_TOKEN Vercel variables
 # hold the trigger's fire URL and token (scripts/setup-vercel.sh leaves them for the owner).
-repository: metasrm2026-ui/metomate
+repository: metasrm2026-ui/dish
 environment: null                               # the product's own cloud environment (its env_... id)
 branch: main
 secrets: [DASHBOARD_URL, ROUTINE_SECRET, APIFY_TOKEN]   # names only: the values live in the environment's secrets
