@@ -7,7 +7,7 @@ then on the system makes production posts for that page every hour, offers Post 
 editors, and schedules what the editors approve. Nothing is ever posted without a person's approval.
 
 It has nothing to do with any other deployment of the engine: its own repository
-(`metasrm2026-ui/dish`, branch `main`), Vercel project (`metomate`), storage, sign-ins,
+(`metasrm2026-ui/metomate`, branch `main`), Vercel project (`metomate`), storage, sign-ins,
 routines and budgets. No page, account, source, playbook or document of another deployment is in
 this repository, and none may ever be added. The specification is `docs/PRODUCT.md`.
 

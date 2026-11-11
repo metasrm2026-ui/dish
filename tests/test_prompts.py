@@ -71,7 +71,7 @@ def _text(p: Path) -> str:
 def test_the_five_routines_are_in_the_repo_with_their_settings():
     cfg = yaml.safe_load((ROOT / "routines" / "triggers.yaml").read_text())
     assert set(cfg["triggers"]) == set(SCHEDULE) == {p.name.split(".")[0] for p in PROMPTS}
-    assert cfg["repository"] == "metasrm2026-ui/dish" and cfg["branch"] == "main"
+    assert cfg["repository"] == "metasrm2026-ui/metomate" and cfg["branch"] == "main"
     assert set(cfg["secrets"]) == {"DASHBOARD_URL", "ROUTINE_SECRET", "APIFY_TOKEN"}
     for name, t in cfg["triggers"].items():
         assert t["id"] is None or re.fullmatch(r"trig_\w{20,}", t["id"]), name
@@ -82,13 +82,13 @@ def test_the_five_routines_are_in_the_repo_with_their_settings():
         assert (ROOT / t["prompt"]).exists() and (ROOT / t["doc"]).exists(), name
         prompt = _text(ROOT / t["prompt"])
         assert t["doc"] in prompt, f"{name}: the prompt sends the session to its doc"
-        assert "metasrm2026-ui/dish (branch main)" in prompt and "repo dish" in prompt, name
+        assert "metasrm2026-ui/metomate (branch main)" in prompt and "repo metomate" in prompt, name
         for var in ("DASHBOARD_URL", "ROUTINE_SECRET") + (("APIFY_TOKEN",) if name in ("hourly", "onboarding") else ()):
             assert var in prompt, f"{name}: reads {var} from the environment"
         # Metomate's own variable names (the cloud environment is shared with another product's routines),
-        # written for the CLI by one printf that never shows a value
-        assert "DISH_DASHBOARD_URL" in prompt and "DISH_ROUTINE_SECRET" in prompt, name
-        assert "printf 'DASHBOARD_URL=%s\\nROUTINE_SECRET=%s\\n' \"$DISH_DASHBOARD_URL\" \"$DISH_ROUTINE_SECRET\" > .env" in prompt, name
+        # written for the CLI by scripts/routine-env.sh, which never shows a value
+        assert "METOMATE_DASHBOARD_URL" in prompt and "METOMATE_ROUTINE_SECRET" in prompt, name
+        assert "`bash scripts/routine-env.sh`" in prompt and "printf" not in prompt, name
         assert "Never put a secret's value in any other file, a command or your summary" in prompt, name
     assert "socialpilot" in cfg["triggers"]["publisher"]["connectors"]
     # the publisher stays isolated: only it schedules; the onboarding routine reads AccountList and nothing else
